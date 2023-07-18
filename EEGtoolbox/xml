@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ROOT>
+   <name>Units Hip</name>
+   <description>data acquisition with USB NI6343</description>
+   <file_origin>F:\Data</file_origin>
+   <file_datetime>26 September 2012, 17:26:12.227</file_datetime>
+   <file_date_vect>[2012 9 26 17 26 12.227]</file_date_vect>
+   <index/>
+   <recordingchannelsgroup>
+      <name>Units Hip</name>
+      <description>data acquisition with USB NI6343</description>
+      <file_origin>F:\Data</file_origin>
+      <file_datetime>26 September 2012, 17:26:12.227</file_datetime>
+      <file_date_vect>[2012 9 26 17 26 12.227]</file_date_vect>
+      <index/>
+      <channel_ID>[26;27;28;29;30]</channel_ID>
+      <channel_name>unit1Hip unit2Hip unit3Hip unit4Hip unit5Hip</channel_name>
+      <AnalogSignalArray>
+         <name>Units Hip</name>
+         <description/>
+         <file_origin/>
+         <rec_datetime>26 September 2012, 17:26:12.227</rec_datetime>
+         <rec_date_vect>[2012 9 26 17 26 12.227]</rec_date_vect>
+         <t_start>0</t_start>
+         <duration/>
+         <sampling_period>0.0001</sampling_period>
+         <sampling_rate>10000</sampling_rate>
+         <header_offset>0</header_offset>
+         <nbchan>5</nbchan>
+         <offset>[26214400 26214400 26214400 26214400 26214400]</offset>
+         <Gain>[5242880 5242880 5242880 5242880 5242880]</Gain>
+         <precision>unit16</precision>
+      </AnalogSignalArray>
+      <nbchan>5</nbchan>
+   </recordingchannelsgroup>
+</ROOT>

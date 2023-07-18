@@ -1,0 +1,208 @@
+function [Data,Time]=ExtractContinuousData(FilesDir,Info,Chan,TimeReldebSec, TimeRelEndSec,PerSat2Remove,ConvertInRealData)
+    %this function extract data from multibin if necessary and complete missing data by NaN
+    %FilesDir uncessary, should be empty
+    %Data is the output binary data
+    %Time data is the time line in s from the first binnary time start
+    %Chan is the chan number to extract if Chan is empty mean all the data
+    %TimeReldebSec is the time to start the extraction relative to the first bin file in sec 
+    %TimeRelEndSec is the time to end the extraction relative to the first bin file in sec, TimeRelEndSec could be inf the value is rounded at the last minute
+    %PerSat2Remove is the percentage of the adcvalue that are keep, outside
+        %this percentage the value are interpolated with the nearest neighbor,
+        %this parameter is empty if not used
+    %ConvertInRealData = 1 (V °C G ,...) or 0 (binary data)
+    
+    if nargin==5
+        PerSat2Remove=[];
+        ConvertInRealData=0;
+    elseif nargin==6
+        ConvertInRealData=0;
+    end
+    
+    %absolute time start of the first bin
+    TimeStartExp=Info.BinFiles(1).TStart;
+    
+    [GoodBinDeb,PrevNextBinDeb]=GetRightBin(Info,TimeReldebSec,2);
+     
+    %if TimeRelEndSec is infinte
+    if isinf(TimeRelEndSec)
+        GoodBinEnd=length(Info.BinFiles);
+        TimeRelEndSec=floor(((Info.BinFiles(end).TStart-Info.BinFiles(1).TStart)*24*3600+ Info.BinFiles(end).Duration)/60)*60;
+    else
+        [GoodBinEnd,PrevNextBinEnd]=GetRightBin(Info,TimeRelEndSec,2);
+    end
+     
+
+    DebNan=0;
+
+        
+    
+    %if the start time is between 2 files
+    if isnan(GoodBinDeb)==1 && isnan(GoodBinEnd)==0
+        GoodBinDeb=PrevNextBinDeb(2);
+        DebNan=1;
+    %if the end time is between two files
+    elseif isnan(GoodBinDeb)==0 && isnan(GoodBinEnd)==1
+        GoodBinEnd=PrevNextBinEnd(1);
+  
+    %if both  are between two files
+    elseif isnan(GoodBinDeb)==1 && isnan(GoodBinEnd)==1
+        GoodBinDeb=PrevNextBinDeb(2);
+        GoodBinEnd=PrevNextBinEnd(1);
+        DebNan=1;
+  
+    end
+    
+   
+
+    %data duration in s
+    DataDuration=TimeRelEndSec-TimeReldebSec ;
+   
+    if GoodBinDeb==GoodBinEnd && isnan(GoodBinDeb)==0 && isnan(GoodBinEnd)==0 %data are in the same bin file
+        %get the binary data
+        
+        RelStartBin1=TimeReldebSec-etime(datevec(Info.BinFiles(GoodBinDeb).TStart),datevec(TimeStartExp));
+        RelEndBin1=RelStartBin1+DataDuration;
+        BinFilename1=fullfile(Info.BinFiles(GoodBinDeb).Dir,Info.BinFiles(GoodBinDeb).FileName);
+        fidbin1=fopen(BinFilename1);
+        if isempty(Chan)==0
+            Data=ReadChanBinFile(Info.Fs,RelStartBin1,RelEndBin1,fidbin1,Chan,Info.NbRecChan,Info.Precision)';
+        else
+            Data=ReadBinFile(Info.Fs,RelStartBin1,RelEndBin1,fidbin1,Info.NbRecChan,0,Info.Precision);
+        end
+        fclose(fidbin1);
+        
+    elseif GoodBinDeb~=GoodBinEnd && GoodBinEnd-GoodBinDeb==1 && isnan(GoodBinDeb)==0 && isnan(GoodBinEnd)==0 %data are in two different consecutive files
+        %get the first part
+        RelStartBin1=TimeReldebSec-etime(datevec(Info.BinFiles(GoodBinDeb).TStart),datevec(TimeStartExp));
+        RelEndBin1=inf;
+        BinFilename1=fullfile(Info.BinFiles(GoodBinDeb).Dir,Info.BinFiles(GoodBinDeb).FileName);
+        fidbin1=fopen(BinFilename1);
+        if isempty(Chan)==0
+            Data1=ReadChanBinFile(Info.Fs,RelStartBin1,RelEndBin1,fidbin1,Chan,Info.NbRecChan,Info.Precision)';
+        else
+            Data1=ReadBinFile(Info.Fs,RelStartBin1,RelEndBin1,fidbin1,Info.NbRecChan,0,Info.Precision);
+        end
+        fclose(fidbin1);
+        
+        %get the last part
+        RelStartBin2=0; 
+        RelEndBin2=TimeRelEndSec-etime(datevec(Info.BinFiles(GoodBinEnd).TStart),datevec(TimeStartExp));
+        BinFilename2=fullfile(Info.BinFiles(GoodBinEnd).Dir, Info.BinFiles(GoodBinEnd).FileName);
+        fidbin2=fopen(BinFilename2);
+        if isempty(Chan)==0
+            Data2=ReadChanBinFile(Info.Fs,RelStartBin2,RelEndBin2,fidbin2,Chan,Info.NbRecChan,Info.Precision)';
+        else
+            Data2=ReadBinFile(Info.Fs,RelStartBin2,RelEndBin2,fidbin2,Info.NbRecChan,0,Info.Precision);
+        end
+        fclose(fidbin2);
+        
+        %fill the blank between files and test if data are not superposed
+        DurationPart1= size(Data1,2)/Info.Fs;
+        DurationPart2= size(Data2,2)/Info.Fs;
+        
+        if DurationPart1+DurationPart2>DataDuration
+            sprintf('Warning data are superimposed (%d s)',(DurationPart2+DurationPart1)-DataDuration)
+        else
+            sprintf('%10.3f sec of data missing',DataDuration-(DurationPart2+DurationPart1))
+        end
+        
+        Data=NaN(size(Data1,1),floor(DataDuration*Info.Fs),1);
+        if isempty(Data1)==0
+            Data(:,1:length(Data1))=Data1;
+        end
+        if isempty(Data2)==0
+            Data(:,end-length(Data2)+1:end)=Data2;
+        end
+        
+  
+    elseif GoodBinDeb~=GoodBinEnd && GoodBinEnd-GoodBinDeb>1 && isnan(GoodBinDeb)==0 && isnan(GoodBinEnd)==0 %data are in the two different non consecutive files
+        get all data from all bin file
+         if isempty(Chan)==1
+            Data=NaN(Info.NbRecChan,floor(DataDuration*Info.Fs),1);
+         else
+             Data=NaN(1,floor(DataDuration*Info.Fs),1);
+         end
+
+        for nbin=GoodBinDeb:GoodBinEnd
+            BinFilename{nbin}=fullfile(Info.BinFiles(nbin).Dir,Info.BinFiles(nbin).FileName);
+            
+            CurrBinDuration=GetBinDuration(BinFilename{nbin},Info.NbRecChan)/Info.Fs;
+             %get the right part of the binfile
+            
+            if nbin>GoodBinDeb
+                RelStartBin{nbin}=0;
+                RelStart{nbin}=etime(datevec(Info.BinFiles(nbin).TStart),datevec(TimeStartExp))-TimeReldebSec;
+            elseif nbin==GoodBinDeb && DebNan==0
+                RelStartBin{nbin}=TimeReldebSec-etime(datevec(Info.BinFiles(nbin).TStart),datevec(TimeStartExp));
+                RelStart{nbin}=0;
+            elseif nbin==GoodBinDeb && DebNan==1
+                RelStartBin{nbin}=0;
+                RelStart{nbin}=etime(datevec(Info.BinFiles(nbin).TStart),datevec(TimeStartExp))-TimeReldebSec;          
+            end
+            RelEndBin{nbin}=TimeRelEndSec-etime(datevec(Info.BinFiles(nbin).TStart),datevec(TimeStartExp));
+           if RelEndBin{nbin}>CurrBinDuration
+               RelEndBin{nbin}=CurrBinDuration;
+           end
+            
+            
+            fidbin{nbin}=fopen(BinFilename{nbin});
+            Datacurr=[];
+            if isempty(Chan)==0
+                Datacurr=ReadChanBinFile(Info.Fs,RelStartBin{nbin},RelEndBin{nbin},fidbin{nbin},Chan,Info.NbRecChan,Info.Precision)';
+            else
+                Datacurr=ReadBinFile(Info.Fs,RelStartBin{nbin},RelEndBin{nbin},fidbin{nbin},Info.NbRecChan,0,Info.Precision);
+            end
+            fclose(fidbin{nbin});
+
+            %fill the blank between files and test if data are not superposed
+            DurationPart{nbin}= size(Datacurr,2)/Info.Fs;
+            
+           
+            
+       
+            if nbin-GoodBinDeb>=1
+                DurationBetweenParts=RelStart{nbin}-(RelStart{nbin-1}+DurationPart{nbin-1});
+                if DurationBetweenParts<0
+                    sprintf('Warning data are superimposed (%10.3f s)',abs(DurationBetweenParts))
+                elseif DurationBetweenParts>0
+                    sprintf('%10.3f sec of data missing',abs(DurationBetweenParts))
+                elseif DurationBetweenParts==0
+                    sprintf('0 sec of data are missing between the 2 files.')
+                end
+            end
+            
+            
+            %EndIdx=size(Datacurr,2);
+            StartIdx=floor((RelStart{nbin})*Info.Fs)+1;
+            if StartIdx<=0
+                StartIdx=0;
+            end
+                
+            
+             if isempty(Datacurr)==0
+                Data(:,StartIdx:StartIdx+size(Datacurr,2)-1)=Datacurr;
+             end
+             
+             
+             if isempty(PerSat2Remove)==0
+                 Data=removesat(Data,Info.Precision,PerSat2Remove);
+             end
+             
+            
+        end
+        
+ 
+    if ConvertInRealData==1
+        
+        if isempty(Chan)==1
+            Chan=1:Info.NbRecChan;
+        end
+        
+        Data=ADC2Real(Data,Info.Range(Chan)./2,Info.Gain(Chan),Info.Offset(Chan));
+        
+        
+    end
+    
+    Time=linspace(TimeReldebSec, TimeRelEndSec, length(Data));
+
+end
