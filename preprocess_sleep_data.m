@@ -3,10 +3,10 @@
 % January 2023 by Doug Kelley for compatibility with Unix and paths on
 % BlueHive. But missing SEV2mat.m, a helper function for TDTbin2mat.m.
 
+
+function [] = preprocess_sleep_data(varargin)
+p = inputParser;
 %% 1) Define mouse data
-clear all 
-close all
-clc
 % data structure:
     % 1) FP raw data
     % 2) EEG raw data
@@ -16,26 +16,50 @@ clc
     % 6) time of injection (s) - back in arena - according to EEG/EMG recording
     % 7) Hypnogram time correction (s)
     % 8) Interval used for signal normalization (only batch II)
+addRequired(p, 'FP_data_path', @ischar);
+addRequired(p, 'EEG_EMG_data_path', @ischar);
+addRequired(p, 'chan_A', @ischar);
+addRequired(p, 'chan_B', @ischar);
+addRequired(p, 'chan_C', @ischar);
+addRequired(p, 'interval');
 
+default_EEG_sampling_rate = 512;
+default_EMG_sampling_rate = 512;
+default_NE_sampling_rate = 1017;
+default_save_path = 'data.mat';
+addOptional(p, 'EEG_sampling_rate', default_EEG_sampling_rate, @isnumeric);
+addOptional(p, 'EMG_sampling_rate', default_EMG_sampling_rate, @isnumeric);
+addOptional(p, 'NE_sampling_rate', default_NE_sampling_rate, @isnumeric);
+addOptional(p, 'save_path', default_save_path, @ischar);
+
+% Parse the inputs.
+parse(p, varargin{:})
+
+% Access the variables.
+FP_data_path = p.Results.FP_data_path;
+EEG_EMG_data_path = p.Results.EEG_EMG_data_path;
+chan_A = p.Results.chan_A;
+chan_B = p.Results.chan_B;
+chan_C = p.Results.chan_C;
+interval = p.Results.interval;
+
+EEG_sampling_rate = p.Results.EEG_sampling_rate;
+EMG_sampling_rate = p.Results.EMG_sampling_rate;
+NE_sampling_rate = p.Results.NE_sampling_rate;
+save_path = p.Results.save_path;
 % specify experiment files and channels
-EEG_FP_477_saline = {'20210712_EEGFP_1_477_2_486_sal' '477_sal/477_sal_2021-07-12_09-53-03-198.exp' 'x465A' 'x405A' 'PtC0' (1000:12000)};
-EEG_FP_486_saline = {'20210712_EEGFP_1_477_2_486_sal' '486_sal/486_sal_2021-07-12_09-53-03-198.exp' '486_sal/486_sal_sleepscore_1s.xlsx' 'x465C' 'x405C' 'PtC0' 3200 0 (1000:12000) 14 15};
-
+%mouse = {'20210712_EEGFP_1_477_2_486_sal' '477_sal/477_sal_2021-07-12_09-53-03-198.exp' 'x465A' 'x405A' 'PtC0' (1000:12000)};
 % {fiber_photometry_(NE)_data  EEG_EMG_data chanA chanB chanC}
-
-mouse = EEG_FP_477_saline;
 
 %% 2b) Load FP (fiber_photometry) data (batch II)
 
-data = TDTbin2mat(mouse{1}); % data is a struct
-
-signal_fs = data.streams.(mouse{3}).fs; % sampling frequency for NE, one number
-
-signal_465 = data.streams.(mouse{3}).data; % hSyn-NE, array 1-D
-signal_405 = data.streams.(mouse{4}).data; % autofluorescence, array, 1-D
+data = TDTbin2mat(FP_data_path); % data is a struct
+signal_fs = data.streams.(chan_A).fs; % sampling frequency for NE, one number
+signal_465 = data.streams.(chan_A).data; % hSyn-NE, array 1-D
+signal_405 = data.streams.(chan_B).data; % autofluorescence, array, 1-D
 
 % removing FP trace prior to first TTL pulse
-TTL_FP = data.epocs.(mouse{5}).onset; %
+TTL_FP = data.epocs.(chan_C).onset; %
 TTL_gap = diff(TTL_FP) > 5 + 1;
 if isempty(find(TTL_gap == 1, 1))
     TTL_onset = TTL_FP(1);  % when TTL pulse train is only started once
@@ -49,7 +73,6 @@ onset_FP = first_TTL;
 signal_465 = signal_465(onset_FP:end);
 signal_405 = signal_405(onset_FP:end);
 
-
 %% 3b) Normalize and plot (batch II)
 
 MeanFilterOrder = 1000; % for smoothing
@@ -58,7 +81,7 @@ MeanFilter = ones(MeanFilterOrder,1)/MeanFilterOrder;
 fs_signal = 1:1:length(signal_465);
 sec_signal = fs_signal/signal_fs;
 
-reg = polyfit(signal_405(round(mouse{6}*signal_fs)), signal_465(round(mouse{6}*signal_fs)), 1);
+reg = polyfit(signal_405(round(interval*signal_fs)), signal_465(round(interval*signal_fs)), 1);
 a = reg(1);
 b = reg(2);
 controlFit = a.*signal_405 + b;
@@ -111,7 +134,7 @@ title('NE2m');
 addpath('EEGtoolbox'); % consider putting this stuff in a common place
 
 % Import EEG raw data to matlab
-Info=loadEXP([mouse{2}],'no');
+Info=loadEXP(EEG_EMG_data_path,'no');
 
 TimeReldebSec=0; %start extract data from the beginning (first bin)
 %TimeRelEndSec=inf; %inf to include all data (until last bin)
@@ -128,7 +151,6 @@ EEG_time = (0:length(EEG_rawtrace)-1)/sampling_freq;
 
 
 % Plot of EEG and EMG traces
-
 figure
 h(1) = subplot(2,1,1);
     plot(EEG_time, EMG_rawtrace); 
@@ -182,13 +204,14 @@ linkaxes([h(1),h(2)],'x');
  %% 6) reshaping EEG, EMG, and NE
 
 % divide by sampling rate to get the duration in seconds
-nrows_eeg = fix(numel(EEG_rawtrace_cut)/512); 
-nrows_emg = fix(numel(EMG_rawtrace_cut)/512);
-nrows_ne = fix(numel(delta465_filt)/1017);
+nrows_eeg = fix(numel(EEG_rawtrace_cut)/EEG_sampling_rate); 
+nrows_emg = fix(numel(EMG_rawtrace_cut)/EMG_sampling_rate);
+nrows_ne = fix(numel(delta465_filt)/NE_sampling_rate);
 nrows = min([nrows_eeg nrows_emg nrows_ne]); % take the smallest duration
 
-trial_eeg = transpose(reshape(EEG_rawtrace_cut(1:nrows*512), [512, nrows]));
-trial_emg = transpose(reshape(EMG_rawtrace_cut(1:nrows*512), [512, nrows]));
-trial_ne = transpose(reshape(delta465_filt(1:nrows*1017), [1017, nrows]));
+trial_eeg = transpose(reshape(EEG_rawtrace_cut(1:nrows*EEG_sampling_rate), [EEG_sampling_rate, nrows]));
+trial_emg = transpose(reshape(EMG_rawtrace_cut(1:nrows*EMG_sampling_rate), [EMG_sampling_rate, nrows]));
+trial_ne = transpose(reshape(delta465_filt(1:nrows*NE_sampling_rate), [NE_sampling_rate, nrows]));
 
-save data.mat trial_eeg trial_emg trial_ne
+save(save_path, "trial_eeg", "trial_emg", "trial_ne")
+end
