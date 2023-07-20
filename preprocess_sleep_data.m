@@ -3,19 +3,16 @@
 % January 2023 by Doug Kelley for compatibility with Unix and paths on
 % BlueHive. But missing SEV2mat.m, a helper function for TDTbin2mat.m.
 
-
 function [] = preprocess_sleep_data(varargin)
 p = inputParser;
 %% 1) Define mouse data
-% data structure:
+% required arguments:
     % 1) FP raw data
     % 2) EEG raw data
-    % 3) EEG sleep score
-    % 4) 465 channel name
-    % 5) 560 channel name
-    % 6) time of injection (s) - back in arena - according to EEG/EMG recording
-    % 7) Hypnogram time correction (s)
-    % 8) Interval used for signal normalization (only batch II)
+    % 3) 465 channel name
+    % 4) 405 channel name
+    % 5) TTL channel name
+    % 6) Interval used for signal normalization (only batch II)
 addRequired(p, 'FP_data_path', @ischar);
 addRequired(p, 'EEG_EMG_data_path', @ischar);
 addRequired(p, 'chan_A', @ischar);
@@ -188,18 +185,18 @@ EEG_time_cut = (0:length(EEG_rawtrace_cut)-1)/sampling_freq;
 
 
 figure
-a = subplot(2,1,1);
+a = subplot(3,1,1);
     plot(ds_sec_signal, ds_delta465_filt)
     title('NE2m');
-b = subplot(2,1,1);
+b = subplot(3,1,2);
     plot(EEG_time_cut, EMG_rawtrace_cut); 
     xlabel('time (s)');
     ylabel('EMG (V)');
-c = subplot(2,1,2);
+c = subplot(3,1,3);
     plot(EEG_time_cut, EEG_rawtrace_cut); 
     xlabel('time (s)');
     ylabel('EEG (V)');
-linkaxes([h(1),h(2)],'x');
+linkaxes([a, b, c],'x');
 
  %% 6) reshaping EEG, EMG, and NE
 
