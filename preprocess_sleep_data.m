@@ -57,7 +57,7 @@ save_path = p.Results.save_path;
 show_figure = p.Results.show_figure;
 
 % automatically look for NE data file and sleep scores
-filelist = dir(fullfile(data_path, '**\*.*'));  %get list of files and folders in any subfolder
+filelist = dir(fullfile(data_path, '**', '*.*'));  %get list of files and folders in any subfolder
 filelist = filelist(~[filelist.isdir]);  %remove folders from list
 fileNames = {filelist.name};
 FP_data_path = '';
