@@ -7,39 +7,34 @@ function [] = preprocess_sleep_data(varargin)
 p = inputParser;
 %% 1) Define mouse data
 % required arguments:
-    % 1) EEG, EMG raw data
+    % 1) raw data folder
     % 2) 465 channel name
     % 3) 405 channel name
     % 4) TTL channel name
     % 5) Interval used for signal normalization (only batch II)
-addRequired(p, 'EEG_EMG_data_path', @ischar);
+addRequired(p, 'data_path', @ischar);
 addRequired(p, 'chan_A', @ischar);
 addRequired(p, 'chan_B', @ischar);
 addRequired(p, 'chan_C', @ischar);
 addRequired(p, 'interval');
 
-default_FP_data_path = '';
 default_EEG_sampling_rate = 512;
 default_EMG_sampling_rate = 512;
 default_NE_sampling_rate = 1017;
 default_save_path = 'data.mat';
-default_sleep_scores_file = '';
 default_time_correction = 0;
 default_show_figure = false;
 
 % optional args:
-    % 1) NE raw data
-    % 2) EEG sampling rate
-    % 3) EMG sampling rate
-    % 4) NE sampling rate
-    % 5) sleep scores
-    % 6) time correction is seconds
-    % 7) save path
-addParameter(p, 'FP_data_path', default_FP_data_path, @ischar);
+    % 1) EEG sampling rate
+    % 2) EMG sampling rate
+    % 3) NE sampling rate
+    % 4) time correction in seconds
+    % 5) save path
+
 addParameter(p, 'EEG_sampling_rate', default_EEG_sampling_rate, @isnumeric);
 addParameter(p, 'EMG_sampling_rate', default_EMG_sampling_rate, @isnumeric);
 addParameter(p, 'NE_sampling_rate', default_NE_sampling_rate, @isnumeric);
-addParameter(p, 'sleep_scores_file', default_sleep_scores_file, @ischar);
 addParameter(p, 'time_correction', default_time_correction, @isnumeric);
 addParameter(p, 'save_path', default_save_path, @ischar);
 addParameter(p, 'show_figure', default_show_figure, @islogical);
@@ -48,20 +43,45 @@ addParameter(p, 'show_figure', default_show_figure, @islogical);
 parse(p, varargin{:})
 
 % Access the variables.
-EEG_EMG_data_path = p.Results.EEG_EMG_data_path;
+data_path = p.Results.data_path;
 chan_A = p.Results.chan_A;
 chan_B = p.Results.chan_B;
 chan_C = p.Results.chan_C;
 interval = p.Results.interval;
 
-FP_data_path = p.Results.FP_data_path;
 EEG_sampling_rate = p.Results.EEG_sampling_rate;
 EMG_sampling_rate = p.Results.EMG_sampling_rate;
 NE_sampling_rate = p.Results.NE_sampling_rate;
-sleep_score_file = p.Results.sleep_scores_file;
 time_correction = p.Results.time_correction;
 save_path = p.Results.save_path;
 show_figure = p.Results.show_figure;
+
+% automatically look for NE data file and sleep scores
+filelist = dir(fullfile(data_path, '**\*.*'));  %get list of files and folders in any subfolder
+filelist = filelist(~[filelist.isdir]);  %remove folders from list
+fileNames = {filelist.name};
+FP_data_path = '';
+sleep_score_file = '';
+
+is_tev = endsWith(fileNames, '.tev'); % Logical array indicating files that end with .txt
+tev_file = filelist(is_tev);
+if ~isempty(tev_file)
+    FP_data_path = tev_file.folder;
+else
+    disp('No NE data found.')
+end
+
+is_exp = endsWith(fileNames, '.exp'); % Logical array indicating files that end with .txt
+exp_file = filelist(is_exp);
+EEG_EMG_data_path = fullfile(exp_file.folder, exp_file.name);
+
+is_sleepscore = contains(fileNames, 'score') & endsWith(fileNames, '.xlsx'); % Logical array indicating files that end with .txt
+sleepscore = filelist(is_sleepscore);
+if ~isempty(sleepscore)
+    sleep_score_file = fullfile(sleepscore.folder, sleepscore.name);
+else
+    disp('No sleep scores found.')
+end
 
 % define the following optional variables
 trial_ne = [];
