@@ -2,17 +2,19 @@
 % indicate sleep state, written by the CTN Copenhagen crew. Updated 18
 % January 2023 by Doug Kelley for compatibility with Unix and paths on
 % BlueHive. But missing SEV2mat.m, a helper function for TDTbin2mat.m.
+% major modification by Yue in March, 2024 to add flexibility regarding
+% NE and sleep scores input. See https://github.com/yzhaoinuw/preprocess_sleep_data/tree/dev
 
 function [] = preprocess_sleep_data(varargin)
 p = inputParser;
 %% 1) Define mouse data
 % required arguments:
-    % 1) raw data folder
+    % 1) EEG & EMG data folder
     % 2) 465 channel name
     % 3) 405 channel name
     % 4) TTL channel name
     % 5) Interval used for signal normalization (only batch II)
-addRequired(p, 'data_path', @ischar);
+addRequired(p, 'EEG_EMG_dir', @ischar);
 addRequired(p, 'chan_A', @ischar);
 addRequired(p, 'chan_B', @ischar);
 addRequired(p, 'chan_C', @ischar);
@@ -43,7 +45,7 @@ addParameter(p, 'show_figure', default_show_figure, @islogical);
 parse(p, varargin{:})
 
 % Access the variables.
-data_path = p.Results.data_path;
+EEG_EMG_dir = p.Results.EEG_EMG_dir;
 chan_A = p.Results.chan_A;
 chan_B = p.Results.chan_B;
 chan_C = p.Results.chan_C;
@@ -56,27 +58,32 @@ time_correction = p.Results.time_correction;
 save_path = p.Results.save_path;
 show_figure = p.Results.show_figure;
 
-% automatically look for NE data file and sleep scores
-filelist = dir(fullfile(data_path, '**', '*.*'));  %get list of files and folders in any subfolder
-filelist = filelist(~[filelist.isdir]);  %remove folders from list
-fileNames = {filelist.name};
-FP_data_path = '';
+FP_data_dir = '';
 sleep_score_file = '';
 
-is_tev = endsWith(fileNames, '.tev'); % Logical array indicating files that end with .txt
-tev_file = filelist(is_tev);
+% automatically look for NE data file and sleep scores
+[parent_dir, ~, ~] = fileparts(EEG_EMG_dir);
+parent_dir_file_list = dir(fullfile(parent_dir, '**', '*.*'));  %get list of files and folders in any subfolder
+parent_dir_file_list = parent_dir_file_list(~[parent_dir_file_list.isdir]);  %remove folders from list
+parent_dir_file_names = {parent_dir_file_list.name};
+
+is_tev = endsWith(parent_dir_file_names, '.tev'); % Logical array indicating files that end with .txt
+tev_file = parent_dir_file_list(is_tev);
 if ~isempty(tev_file)
-    FP_data_path = tev_file.folder;
+    FP_data_dir = tev_file.folder;
 else
     disp('No NE data found.')
 end
 
-is_exp = endsWith(fileNames, '.exp'); % Logical array indicating files that end with .txt
-exp_file = filelist(is_exp);
+EEG_EMG_dir_file_list = dir(EEG_EMG_dir);
+EEG_EMG_dir_file_list = EEG_EMG_dir_file_list(~[EEG_EMG_dir_file_list.isdir]);
+EEG_EMG_dir_file_names = {EEG_EMG_dir_file_list.name};
+is_exp = endsWith(EEG_EMG_dir_file_names, '.exp'); % Logical array indicating files that end with .txt
+exp_file = EEG_EMG_dir_file_list(is_exp);
 EEG_EMG_data_path = fullfile(exp_file.folder, exp_file.name);
 
-is_sleepscore = contains(fileNames, 'score') & endsWith(fileNames, '.xlsx'); % Logical array indicating files that end with .txt
-sleepscore = filelist(is_sleepscore);
+is_sleepscore = contains(EEG_EMG_dir_file_names, 'score') & endsWith(EEG_EMG_dir_file_names, '.xlsx'); % Logical array indicating files that end with .txt
+sleepscore = EEG_EMG_dir_file_list(is_sleepscore);
 if ~isempty(sleepscore)
     sleep_score_file = fullfile(sleepscore.folder, sleepscore.name);
 else
@@ -93,8 +100,8 @@ nrows_ne = Inf;
 
 %% 2b) Load FP (fiber_photometry) data (batch II)
 
-if ~isempty(FP_data_path)
-    data = TDTbin2mat(FP_data_path); % data is a struct
+if ~isempty(FP_data_dir)
+    data = TDTbin2mat(FP_data_dir); % data is a struct
     signal_fs = data.streams.(chan_A).fs; % sampling frequency for NE, one number
     signal_465 = data.streams.(chan_A).data; % hSyn-NE, array 1-D
     signal_405 = data.streams.(chan_B).data; % autofluorescence, array, 1-D
@@ -109,7 +116,7 @@ if ~isempty(FP_data_path)
     end
     
     first_TTL = TTL_onset(1)*signal_fs; %sampling point # to start with
-    onset_FP = first_TTL;
+    onset_FP = round(first_TTL);
     
     signal_465 = signal_465(onset_FP:end);
     signal_405 = signal_405(onset_FP:end);
@@ -150,7 +157,7 @@ end
 
 % Add functions to path
 % addpath(genpath(['Q:Personal_folders/Mie/EEG data from NH/EEG toolbox']));
-addpath('EEGtoolbox'); % consider putting this stuff in a common place
+% addpath('EEGtoolbox'); % consider putting this stuff in a common place
 
 % Import EEG raw data to matlab
 Info=loadEXP(EEG_EMG_data_path,'no');
@@ -267,12 +274,12 @@ nrows = min([nrows_eeg nrows_emg nrows_ne]); % take the smallest duration
 trial_eeg = transpose(reshape(EEG_rawtrace_cut(1:nrows*EEG_sampling_rate), [EEG_sampling_rate, nrows]));
 trial_emg = transpose(reshape(EMG_rawtrace_cut(1:nrows*EMG_sampling_rate), [EMG_sampling_rate, nrows]));
 
-if ~isempty(FP_data_path)
+if ~isempty(FP_data_dir)
     trial_ne = transpose(reshape(delta465_filt(1:nrows*NE_sampling_rate), [NE_sampling_rate, nrows]));
 end
 
 if show_figure
-    if ~isempty(FP_data_path)
+    if ~isempty(FP_data_dir)
         figure
         a = subplot(4,1,1);
         plot(sec_signal(1000:end), signal_405(1000:end));
