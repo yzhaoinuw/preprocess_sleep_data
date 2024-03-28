@@ -1,7 +1,7 @@
-% preprocess_sleep_data.m (originally named Data_core_NE_EEG.m): a script for post-processing vital signs that
-% indicate sleep state, written by the CTN Copenhagen crew. Updated 18
-% January 2023 by Doug Kelley for compatibility with Unix and paths on
-% BlueHive. But missing SEV2mat.m, a helper function for TDTbin2mat.m.
+% preprocess_sleep_data.m (based on Data_core_NE_EEG.m, written by Celia and Mie,
+% updated 18 January 2023 by Doug Kelley for compatibility with Unix and paths on
+% BlueHive.): 
+% a script for preprocessing vital signs that indicate sleep state.  
 % major modification by Yue in March, 2024 to add flexibility regarding
 % NE and sleep scores input. See https://github.com/yzhaoinuw/preprocess_sleep_data/tree/dev
 
@@ -94,9 +94,6 @@ end
 trial_ne = [];
 sleep_scores = [];
 nrows_ne = Inf;
-% specify experiment files and channels
-%mouse = {'20210712_EEGFP_1_477_2_486_sal' '477_sal/477_sal_2021-07-12_09-53-03-198.exp' 'x465A' 'x405A' 'PtC0' (1000:12000)};
-% {fiber_photometry_(NE)_data  EEG_EMG_data chanA chanB chanC}
 
 %% 2b) Load FP (fiber_photometry) data (batch II)
 
@@ -107,8 +104,8 @@ if ~isempty(FP_data_dir)
     signal_405 = data.streams.(chan_B).data; % autofluorescence, array, 1-D
     
     % removing FP trace prior to first TTL pulse
-    TTL_FP = data.epocs.(chan_C).onset; %
-    TTL_gap = diff(TTL_FP) > 5 + 1;
+    TTL_FP = data.epocs.(chan_C).onset; % TTL_FP is the timestamps
+    TTL_gap = diff(TTL_FP) > 5 + 1; % the interval of the pulse is 5 seconds 
     if isempty(find(TTL_gap == 1, 1))
         TTL_onset = TTL_FP(1);  % when TTL pulse train is only started once
     else 
@@ -152,13 +149,6 @@ end
 
 %% 3) loading and plotting EEG and EMG raw data
 
-% Make sure the "ExpToolbox" is added to the matlab path and choose the .exp
-% file from the folder downloaded from dropbox, e.g. "PROX1_1_EEG" or "PROX1_2_EEG"
-
-% Add functions to path
-% addpath(genpath(['Q:Personal_folders/Mie/EEG data from NH/EEG toolbox']));
-% addpath('EEGtoolbox'); % consider putting this stuff in a common place
-
 % Import EEG raw data to matlab
 Info=loadEXP(EEG_EMG_data_path,'no');
 
@@ -180,7 +170,7 @@ EEG_time = (0:length(EEG_rawtrace)-1)/sampling_freq;
 % NB! If there is a systematic time lag between EEG/EMG traces and scoring adjust for it by seconds here
 if ~isempty(sleep_score_file)
     % Assumption: For binary vectors index 1 = time 0-1s, index 2= time 1-2 sec, and so forth
-    sleep_scores = zeros(1, int64(numel(EEG_rawtrace) / Info.Fs)); % #243 gives error - add 5 to length
+    sleep_scores = zeros(1, int64(numel(EEG_rawtrace) / Info.Fs)); 
     EEG_sleepscore = readmatrix(sleep_score_file); % xlsread is not recommended by matlab, using readmatrix instead
     
     % Create binary vectors for sleep stages
@@ -201,7 +191,7 @@ if ~isempty(sleep_score_file)
 
     % Most EEG scorings don't start at time 0 - which shifts the timeline of the
     % scoring relative to the EEG/EMG traces - this is corrected for below
-    EEG_scoring_onset =  min([wake_onset(1), sws_onset(1)]);
+    EEG_scoring_onset =  min([wake_onset(1), sws_onset(1)]); % the sleep scoring software shifts the sleep scores by a variable amount
 
     if ~isempty(REM_onset)
         EEG_scoring_onset = min([EEG_scoring_onset, REM_onset(1)]);
@@ -238,29 +228,32 @@ end
 %% 5) Alingment of EEG recording and FP recording
 
 % TTL pulse from FP
-TTL_pulse = Data(3,1:end);
-onset_EEG = find(diff(TTL_pulse>1*10^-3));
-onset_EEG_time = onset_EEG/sampling_freq;
-onset_EEG_time_diff = diff(onset_EEG_time);
-
-TTL_gap_EEG = onset_EEG_time_diff > 5;
-if isempty(find(TTL_gap_EEG==1, 1))
-    onset_EEG = onset_EEG(1);
-else 
-    onset_EEG = onset_EEG(find(onset_EEG_time_diff>5)+1);
+TTL_pulse = Data(3,1:end); % the actual pulse time series
+TTL_pulse_indices = find(diff(TTL_pulse>1*10^-3)==1);
+if isempty(TTL_pulse_indices) % no ttl pulse implies no FP data recorded
+    onset_EEG_ind = 1;
+else
+    TTL_pulse_time = TTL_pulse_indices/sampling_freq;
+    TTL_pulse_time_diff = diff(TTL_pulse_time);
+    
+    TTL_pulse_time_gap = TTL_pulse_time_diff > 6;
+    if isempty(find(TTL_pulse_time_gap, 1))
+        onset_EEG = TTL_pulse_time(1);
+    else 
+        onset_EEG = TTL_pulse_time(find(TTL_pulse_time_gap, 1)+1);
+    end    
+    onset_EEG_ind = round(onset_EEG*sampling_freq);
 end
-
-TTL_EEG_onset = onset_EEG/sampling_freq;
 
 %Cutting EEG/EMG traces leading up to first TTL 
 % Removing first seconds of EEG and EMG raw traces to align with FP trace
-EMG_rawtrace_cut = EMG_rawtrace(round(TTL_EEG_onset*sampling_freq):end);
-EEG_rawtrace_cut = EEG_rawtrace(round(TTL_EEG_onset*sampling_freq):end);
+EMG_rawtrace_cut = EMG_rawtrace(onset_EEG_ind:end);
+EEG_rawtrace_cut = EEG_rawtrace(onset_EEG_ind:end);
 EEG_time_cut = (0:length(EEG_rawtrace_cut)-1)/sampling_freq;
 
 if ~isempty(sleep_scores)
     % Remove first seconds of EEG score to align with FP trace
-    sleep_scores = sleep_scores(round(TTL_EEG_onset+1):end);
+    sleep_scores = sleep_scores(round(onset_EEG+1):end);
 end
 
  %% 6) reshaping EEG, EMG, and NE
@@ -302,6 +295,21 @@ if show_figure
         plot(ds_sec_signal, ds_delta465_filt)
         title('NE2m');
 
+        figure
+        a = subplot(3,1,1);
+            plot(EEG_time_cut, EMG_rawtrace_cut); 
+            xlabel('time (s)');
+            ylabel('EMG (V)');
+        b = subplot(3,1,2);
+            plot(EEG_time_cut, EEG_rawtrace_cut); 
+            xlabel('time (s)');
+            ylabel('EEG (V)');
+        c = subplot(3,1,3);
+            plot(ds_sec_signal, ds_delta465_filt); 
+            xlabel('time (s)');
+            ylabel('NE');
+        linkaxes([a, b, c],'x');
+
     end
 
     % Plot of EEG and EMG traces
@@ -309,28 +317,18 @@ if show_figure
     h(1) = subplot(2,1,1);
         plot(EEG_time, EMG_rawtrace); 
         xlabel('time (s)');
-        ylabel('EMG (V)');
+        ylabel('EMG Raw (V)');
     h(2) = subplot(2,1,2);
         plot(EEG_time, EEG_rawtrace); 
         xlabel('time (s)');
-        ylabel('EEG (V)');
+        ylabel('EEG Raw (V)');
     linkaxes([h(1),h(2)],'x');
 
-    figure
-    b = subplot(3,1,1);
-        plot(EEG_time_cut, EMG_rawtrace_cut); 
-        xlabel('time (s)');
-        ylabel('EMG (V)');
-    c = subplot(3,1,2);
-        plot(EEG_time_cut, EEG_rawtrace_cut); 
-        xlabel('time (s)');
-        ylabel('EEG (V)');
-    linkaxes([a, b, c],'x');
 end
 
 pred_labels = sleep_scores;
 num_class = 3;
 confidence = [];
 %save(save_path, "trial_eeg", "trial_emg", "trial_ne", "sleep_scores", "-v7.3")
-save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence")
+save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence", "-v7.3")
 end
