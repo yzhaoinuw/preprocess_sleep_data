@@ -7,50 +7,40 @@
 % if you have issues accessing, please email Yue at yuezhao@rochester.edu
 
 function [] = preprocess_sleep_data(varargin)
+%% 1) Define args and params
 p = inputParser;
-%% 1) Define mouse data
-% required arguments:
-    % 1) EEG & EMG data folder
-    % 2) 465 channel name
-    % 3) 405 channel name
-    % 4) TTL channel name
-    % 5) Interval used for signal normalization (only batch II)
-addRequired(p, 'data_dir', @ischar);
+
+addRequired(p, 'eeg_emg_path', @ischar);
 
 default_fp_dir = '';
-default_chan_A = '';
-default_chan_B = '';
+default_chan_465 = '';
+default_chan_405 = '';
 default_chan_ttl_pulse = '';
 default_interval = [];
-default_EEG_stream = 'EEGw';
-default_EEG_chan = 1;
-default_EMG_stream = 'EMG1';
+default_EEG_stream = '';
+default_EEG_chan = nan;
+default_EMG_stream = '';
 default_EEG_sampling_rate = 512;
 default_EMG_sampling_rate = 512;
 default_NE_sampling_rate = 1017;
-default_time_correction = 0;
+default_time_correction = nan;
+default_sleep_score_file = '';
 default_save_path = '';
 default_show_figure = false;
 
-% optional args:
-    % 1) EEG sampling rate
-    % 2) EMG sampling rate
-    % 3) NE sampling rate
-    % 4) time correction in seconds
-    % 5) save path
-
 addParameter(p, 'fp_dir', default_fp_dir, @ischar);
-addParameter(p, 'chan_A', default_chan_A, @ischar);
-addParameter(p, 'chan_B', default_chan_B, @ischar);
-addParameter(p, 'chan_ttl_pulse', default_chan_ttl_pulse, @ischar);
-addParameter(p, 'interval', default_interval, @isvector);
 addParameter(p, 'EEG_stream', default_EEG_stream, @ischar);
 addParameter(p, 'EEG_chan', default_EEG_chan, @isnumeric);
 addParameter(p, 'EMG_stream', default_EMG_stream, @ischar);
+addParameter(p, 'chan_465', default_chan_465, @ischar);
+addParameter(p, 'chan_405', default_chan_405, @ischar);
+addParameter(p, 'chan_ttl_pulse', default_chan_ttl_pulse, @ischar);
+addParameter(p, 'interval', default_interval, @isvector);
 addParameter(p, 'EEG_sampling_rate', default_EEG_sampling_rate, @isnumeric);
 addParameter(p, 'EMG_sampling_rate', default_EMG_sampling_rate, @isnumeric);
 addParameter(p, 'NE_sampling_rate', default_NE_sampling_rate, @isnumeric);
 addParameter(p, 'time_correction', default_time_correction, @isnumeric);
+addParameter(p, 'sleep_score_file', default_sleep_score_file, @ischar);
 addParameter(p, 'save_path', default_save_path, @ischar);
 addParameter(p, 'show_figure', default_show_figure, @islogical);
 
@@ -58,91 +48,65 @@ addParameter(p, 'show_figure', default_show_figure, @islogical);
 parse(p, varargin{:})
 
 % Access the variables.
-data_dir = p.Results.data_dir;
-[~,data_name,~] = fileparts(data_dir);
+eeg_emg_path = p.Results.eeg_emg_path;
+[~,data_name,~] = fileparts(eeg_emg_path);
 
 fp_dir = p.Results.fp_dir;
-chan_A = p.Results.chan_A;
-chan_B = p.Results.chan_B;
-chan_ttl_pulse = p.Results.chan_ttl_pulse;
-interval = p.Results.interval;
 EEG_stream = p.Results.EEG_stream;
 EEG_chan = p.Results.EEG_chan;
 EMG_stream = p.Results.EMG_stream;
+chan_465 = p.Results.chan_465;
+chan_405 = p.Results.chan_405;
+chan_ttl_pulse = p.Results.chan_ttl_pulse;
+interval = p.Results.interval;
 EEG_sampling_rate = p.Results.EEG_sampling_rate;
 EMG_sampling_rate = p.Results.EMG_sampling_rate;
 NE_sampling_rate = p.Results.NE_sampling_rate;
 time_correction = p.Results.time_correction;
+sleep_score_file = p.Results.sleep_score_file;
 save_path = p.Results.save_path;
 show_figure = p.Results.show_figure;
 
-sleep_score_file = '';
-
-data_dir_file_list = dir(data_dir);
-data_dir_file_list = data_dir_file_list(~[data_dir_file_list.isdir]);
-data_dir_file_names = {data_dir_file_list.name};
-is_exp = endsWith(data_dir_file_names, '.exp'); % Logical array indicating files that end with .txt
-exp_file = data_dir_file_list(is_exp);
-
-% no exp file implies that the EEG & EMG are recorded with the TDT system,
-% so look for EEG & EMG in the FP data
-if isempty(exp_file)
+% determine eeg_emg_path is .exp or from fp data  
+[parent_dir, filename, ext] = fileparts(eeg_emg_path);
+if strcmpi(ext, '.exp')
+    exp_file_path = eeg_emg_path;
+else % EEG/EMG come from FP data
     exp_file_path = '';
-    disp('No exp file found. Will search for EEG/EMG in TDT files.')
-else
-    exp_file_path = fullfile(exp_file.folder, exp_file.name);
 end
 
-if isempty(fp_dir)
-    % automatically look for fp files if not provided explicitly
-    [parent_dir, ~, ~] = fileparts(data_dir);
-    parent_dir_file_list = dir(fullfile(parent_dir, '**', '*.*'));  %get list of files and folders in any subfolder
-    parent_dir_file_list = parent_dir_file_list(~[parent_dir_file_list.isdir]);  %remove folders from list
-    parent_dir_file_names = {parent_dir_file_list.name};
-
-    is_tev = endsWith(parent_dir_file_names, '.tev'); % Logical array indicating files that end with .txt
-    tev_file = parent_dir_file_list(is_tev);
-    if ~isempty(tev_file)
-        fp_dir = tev_file.folder;
-    else
-        disp('No TDT files found.')
-    end
-end
-
-if ~isempty(fp_dir)
-    if isempty(chan_A)
-        disp('please provide chan_A for signal 465.')
+if isempty(fp_dir) 
+    if isempty(exp_file_path)    
+        disp('No exp or TDT files found. Please check the path provided.')
         return
     end
-    if isempty(chan_B)
-        disp('please provide chan_B for signal 405.')
+
+else % if there's fp data
+    if isempty(chan_465)
+        disp('please provide chan_465 for signal 465.')
+        return
+    end
+    if isempty(chan_405)
+        disp('please provide chan_405 for signal 405.')
         return
     end
     if isempty(interval)
         disp('Please provide an interval for the NE data.')
         return
     end
-    if ~isempty(exp_file) && isempty(chan_ttl_pulse)
-        disp('Please provide TTL pulse channel to sync EEG/EMG with the fp data')
-        return
-    end
 
-    fp_data = TDTbin2mat(fp_dir); % data is a struct
-elseif isempty(exp_file_path)    
-    disp('No exp or TDT files found. Please check the path provided.')
-    return
+    % if EMG/EEG and NE come from different sources, must provide ttl pulse
+    % for synchronization
+    if ~strcmp(eeg_emg_path, fp_dir) 
+        if isempty(chan_ttl_pulse)
+            disp('Please provide TTL pulse channel to sync EEG/EMG with the fp data')
+            return
+        end
+    end
 end    
 
 if isempty(save_path)
     save_path = [data_name '.mat'];
-end
-
-is_sleepscore = contains(data_dir_file_names, 'score') & endsWith(data_dir_file_names, '.xlsx'); % Logical array indicating files that end with .txt
-sleepscore = data_dir_file_list(is_sleepscore);
-if ~isempty(sleepscore)
-    sleep_score_file = fullfile(sleepscore.folder, sleepscore.name);
-else
-    disp('No sleep scores found.')
 end
 
 % define the following optional variables
@@ -150,11 +114,11 @@ trial_ne = [];
 sleep_scores = [];
 nrows_ne = Inf;
 
-
 %% 2) loading and plotting EEG and EMG raw data
 
-% Import EEG raw data to matlab
+% if EEG/EMG come from FP data
 if isempty(exp_file_path)
+    fp_data = TDTbin2mat(eeg_emg_path);
     if ~isfield(fp_data.streams, EEG_stream)
         disp('Please provide EEG stream in the TDT file.')
         return
@@ -175,7 +139,7 @@ else
     %TimeRelEndSec=inf; %inf to include all data (until last bin)
     TimeRelEndSec=Info.BinFiles.Duration; %inf to include all data (including last bin)
     
-    [eeg_emg_data,Time]=ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
+    [eeg_emg_data,time]=ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
     
     EMG_rawtrace = eeg_emg_data(1,1:end);
     EEG_rawtrace = eeg_emg_data(2,1:end);
@@ -190,13 +154,16 @@ EEG_time = (0:length(EEG_rawtrace)-1)/sampling_freq;
 %% 3) Load FP (fiber_photometry) data (batch II)
 
 if ~isempty(fp_dir)
-    signal_fs = fp_data.streams.(chan_A).fs; % sampling frequency for NE, one number
+    if ~strcmp(fp_dir, eeg_emg_path) % if NE data come from different sources
+        fp_data = TDTbin2mat(fp_dir); % data is a struct  
+    end
+    signal_fs = fp_data.streams.(chan_465).fs; % sampling frequency for NE, one number
     NE_sampling_rate = round(NE_sampling_rate);
-    signal_465 = fp_data.streams.(chan_A).data; % hSyn-NE, array 1-D
-    signal_405 = fp_data.streams.(chan_B).data; % autofluorescence, array, 1-D
+    signal_465 = fp_data.streams.(chan_465).data; % hSyn-NE, array 1-D
+    signal_405 = fp_data.streams.(chan_405).data; % autofluorescence, array, 1-D
     
-    % if EEG/EMG come from exp, then we need to sync it with fp recording
-    if ~isempty(exp_file)
+    % if different soruces we need to sync it with fp recording
+    if ~strcmp(fp_dir, eeg_emg_path)
         % removing FP trace prior to first TTL pulse
         TTL_FP = fp_data.epocs.(chan_ttl_pulse).onset; % TTL_FP is the timestamps
         TTL_gap = diff(TTL_FP) > 5 + 1; % the interval of the pulse is 5 seconds 
@@ -304,7 +271,7 @@ end
 %% 5) Alingment of EEG recording and FP recording
 % if EEG/EMG and fp data come from different sources, align them using the
 % TTL pulse.
-if ~isempty(exp_file_path) && ~isempty(fp_dir)
+if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
     % TTL pulse from FP
     TTL_pulse = eeg_emg_data(3,1:end); % the actual pulse time series
     TTL_pulse_indices = find(diff(TTL_pulse>1*10^-3)==1);
@@ -340,7 +307,6 @@ end
 % divide by sampling rate to get the duration in seconds
 nrows_eeg = fix(numel(EEG_rawtrace)/EEG_sampling_rate); 
 nrows_emg = fix(numel(EMG_rawtrace)/EMG_sampling_rate);
-%nrows_ne = fix(numel(delta465_filt)/NE_sampling_rate);
 nrows = min([nrows_eeg nrows_emg nrows_ne]); % take the smallest duration
 
 trial_eeg = transpose(reshape(EEG_rawtrace(1:nrows*EEG_sampling_rate), [EEG_sampling_rate, nrows]));
