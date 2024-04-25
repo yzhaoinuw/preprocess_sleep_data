@@ -90,10 +90,6 @@ else % if there's fp data
         disp('please provide chan_405 for signal 405.')
         return
     end
-    if isempty(interval)
-        disp('Please provide an interval for the NE data.')
-        return
-    end
 
     % if EMG/EEG and NE come from different sources, must provide ttl pulse
     % for synchronization
@@ -128,7 +124,7 @@ if isempty(exp_file_path)
         return
     end
 
-    sampling_freq = fp_data.streams.(EEG_stream).fs; %sampling frequency for EEG signal 
+    eeg_frequency = fp_data.streams.(EEG_stream).fs; %sampling frequency for EEG signal 
     EEG = fp_data.streams.(EEG_stream).data; %EEG signal
     EEG_rawtrace = EEG(EEG_chan,:); %add channel (1 or 2)
     EMG_rawtrace = fp_data.streams.(EMG_stream).data; %EMG
@@ -145,11 +141,11 @@ else
     EEG_rawtrace = eeg_emg_data(2,1:end);
     
     %time vector using sampling frequency
-    sampling_freq = Info.Fs;
+    eeg_frequency = Info.Fs;
 end
-EEG_sampling_rate = round(sampling_freq);
-EMG_sampling_rate = round(sampling_freq);
-EEG_time = (0:length(EEG_rawtrace)-1)/sampling_freq;
+EEG_sampling_rate = round(eeg_frequency);
+EMG_sampling_rate = round(eeg_frequency);
+EEG_time = (0:length(EEG_rawtrace)-1)/eeg_frequency;
 
 %% 3) Load FP (fiber_photometry) data (batch II)
 
@@ -157,8 +153,8 @@ if ~isempty(fp_dir)
     if ~strcmp(fp_dir, eeg_emg_path) % if NE data come from different sources
         fp_data = TDTbin2mat(fp_dir); % data is a struct  
     end
-    signal_fs = fp_data.streams.(chan_465).fs; % sampling frequency for NE, one number
-    NE_sampling_rate = round(NE_sampling_rate);
+    ne_frequency = fp_data.streams.(chan_465).fs; % sampling frequency for NE, one number
+    NE_sampling_rate = round(ne_frequency);
     signal_465 = fp_data.streams.(chan_465).data; % hSyn-NE, array 1-D
     signal_405 = fp_data.streams.(chan_405).data; % autofluorescence, array, 1-D
     
@@ -173,7 +169,7 @@ if ~isempty(fp_dir)
             TTL_onset = TTL_FP(find(TTL_gap==1)+1); % when TTL pulse train is started more than once
         end
         
-        first_TTL = TTL_onset(1)*signal_fs; %sampling point # to start with
+        first_TTL = TTL_onset(1)*ne_frequency; %sampling point # to start with
         onset_FP = round(first_TTL);
         
         signal_465 = signal_465(onset_FP:end);
@@ -185,9 +181,13 @@ if ~isempty(fp_dir)
     MeanFilter = ones(MeanFilterOrder,1)/MeanFilterOrder;
     
     fs_signal = 1:1:length(signal_465);
-    sec_signal = fs_signal/signal_fs;
+    sec_signal = fs_signal/ne_frequency;
     
-    reg = polyfit(signal_405(round(interval*signal_fs)), signal_465(round(interval*signal_fs)), 1);
+    if isempty(interval)
+        reg = polyfit(signal_405(1:end), signal_465(1:end), 1);
+    else
+        reg = polyfit(signal_405(round(interval*ne_frequency)), signal_465(round(interval*ne_frequency)), 1);
+    end
     a = reg(1);
     b = reg(2);
     controlFit = a.*signal_405 + b;
@@ -213,7 +213,7 @@ end
 % NB! If there is a systematic time lag between EEG/EMG traces and scoring adjust for it by seconds here
 if ~isempty(sleep_score_file)
     % Assumption: For binary vectors index 1 = time 0-1s, index 2= time 1-2 sec, and so forth
-    sleep_scores = zeros(1, int64(numel(EEG_rawtrace) / sampling_freq)); 
+    sleep_scores = zeros(1, int64(numel(EEG_rawtrace) / eeg_frequency)); 
     EEG_sleepscore = readmatrix(sleep_score_file); % xlsread is not recommended by matlab, using readmatrix instead
     
     % Create binary vectors for sleep stages
@@ -265,7 +265,6 @@ if ~isempty(sleep_score_file)
         d = sws_duration(i)-1;
         sleep_scores(t:t+d) = 1;
     end
-    
 end
 
 %% 5) Alingment of EEG recording and FP recording
@@ -278,7 +277,7 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
     if isempty(TTL_pulse_indices) % no ttl pulse implies no FP data recorded
         onset_EEG_ind = 1;
     else
-        TTL_pulse_time = TTL_pulse_indices/sampling_freq;
+        TTL_pulse_time = TTL_pulse_indices/eeg_frequency;
         TTL_pulse_time_diff = diff(TTL_pulse_time);
         
         TTL_pulse_time_gap = TTL_pulse_time_diff > 6;
@@ -287,14 +286,14 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
         else 
             onset_EEG = TTL_pulse_time(find(TTL_pulse_time_gap, 1)+1);
         end    
-        onset_EEG_ind = round(onset_EEG*sampling_freq);
+        onset_EEG_ind = round(onset_EEG*eeg_frequency);
     end
     
     %Cutting EEG/EMG traces leading up to first TTL 
     % Removing first seconds of EEG and EMG raw traces to align with FP trace
     EMG_rawtrace = EMG_rawtrace(onset_EEG_ind:end);
     EEG_rawtrace = EEG_rawtrace(onset_EEG_ind:end);
-    EEG_time = (0:length(EEG_rawtrace)-1)/sampling_freq;
+    EEG_time = (0:length(EEG_rawtrace)-1)/eeg_frequency;
     
     if ~isempty(sleep_scores)
         % Remove first seconds of EEG score to align with FP trace
@@ -371,9 +370,7 @@ if show_figure
 
 end
 
-pred_labels = sleep_scores;
 num_class = 3;
-confidence = [];
 %save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence", "-v7.3")
-save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence")
+save(save_path, "trial_eeg", "trial_emg", "trial_ne", "sleep_scores", "num_class", "eeg_frequency", "ne_frequency")
 end
