@@ -20,9 +20,6 @@ default_interval = [];
 default_EEG_stream = '';
 default_EEG_chan = nan;
 default_EMG_stream = '';
-default_EEG_sampling_rate = 512;
-default_EMG_sampling_rate = 512;
-default_NE_sampling_rate = 1017;
 default_time_correction = nan;
 default_sleep_score_file = '';
 default_save_path = '';
@@ -36,9 +33,6 @@ addParameter(p, 'chan_465', default_chan_465, @ischar);
 addParameter(p, 'chan_405', default_chan_405, @ischar);
 addParameter(p, 'chan_ttl_pulse', default_chan_ttl_pulse, @ischar);
 addParameter(p, 'interval', default_interval, @isvector);
-addParameter(p, 'EEG_sampling_rate', default_EEG_sampling_rate, @isnumeric);
-addParameter(p, 'EMG_sampling_rate', default_EMG_sampling_rate, @isnumeric);
-addParameter(p, 'NE_sampling_rate', default_NE_sampling_rate, @isnumeric);
 addParameter(p, 'time_correction', default_time_correction, @isnumeric);
 addParameter(p, 'sleep_score_file', default_sleep_score_file, @ischar);
 addParameter(p, 'save_path', default_save_path, @ischar);
@@ -59,9 +53,6 @@ chan_465 = p.Results.chan_465;
 chan_405 = p.Results.chan_405;
 chan_ttl_pulse = p.Results.chan_ttl_pulse;
 interval = p.Results.interval;
-EEG_sampling_rate = p.Results.EEG_sampling_rate;
-EMG_sampling_rate = p.Results.EMG_sampling_rate;
-NE_sampling_rate = p.Results.NE_sampling_rate;
 time_correction = p.Results.time_correction;
 sleep_score_file = p.Results.sleep_score_file;
 save_path = p.Results.save_path;
@@ -106,9 +97,9 @@ if isempty(save_path)
 end
 
 % define the following optional variables
-trial_ne = [];
 sleep_scores = [];
-nrows_ne = Inf;
+ne = [];
+ne_frequency = nan;
 
 %% 2) loading and plotting EEG and EMG raw data
 
@@ -125,9 +116,9 @@ if isempty(exp_file_path)
     end
 
     eeg_frequency = fp_data.streams.(EEG_stream).fs; %sampling frequency for EEG signal 
-    EEG = fp_data.streams.(EEG_stream).data; %EEG signal
-    EEG_rawtrace = EEG(EEG_chan,:); %add channel (1 or 2)
-    EMG_rawtrace = fp_data.streams.(EMG_stream).data; %EMG
+    eeg_data = fp_data.streams.(EEG_stream).data; %EEG signal
+    eeg = eeg_data(EEG_chan,:); %add channel (1 or 2)
+    emg = fp_data.streams.(EMG_stream).data; %EMG
 else
     Info=loadEXP(exp_file_path,'no');
     
@@ -137,15 +128,16 @@ else
     
     [eeg_emg_data,time]=ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
     
-    EMG_rawtrace = eeg_emg_data(1,1:end);
-    EEG_rawtrace = eeg_emg_data(2,1:end);
+    emg = eeg_emg_data(1,1:end);
+    eeg = eeg_emg_data(2,1:end);
     
     %time vector using sampling frequency
     eeg_frequency = Info.Fs;
 end
-EEG_sampling_rate = round(eeg_frequency);
-EMG_sampling_rate = round(eeg_frequency);
-EEG_time = (0:length(EEG_rawtrace)-1)/eeg_frequency;
+
+eeg = single(eeg);
+emg = single(emg);
+time_eeg = (0:length(eeg)-1)/eeg_frequency;
 
 %% 3) Load FP (fiber_photometry) data (batch II)
 
@@ -154,7 +146,6 @@ if ~isempty(fp_dir)
         fp_data = TDTbin2mat(fp_dir); % data is a struct  
     end
     ne_frequency = fp_data.streams.(chan_465).fs; % sampling frequency for NE, one number
-    NE_sampling_rate = round(ne_frequency);
     signal_465 = fp_data.streams.(chan_465).data; % hSyn-NE, array 1-D
     signal_405 = fp_data.streams.(chan_405).data; % autofluorescence, array, 1-D
     
@@ -198,14 +189,14 @@ if ~isempty(fp_dir)
     delta_465 = normDat * 100;
     
     % smoothing traces
-    delta465_filt = filtfilt(MeanFilter,1,double(delta_465));
+    ne = filtfilt(MeanFilter,1,double(delta_465));
     
-    % downsampling traces for plotting
+    % downsample NE
     ds_factor_FP = 100; % also used for plotting later (section 9b)
-    ds_delta465_filt = downsample(delta465_filt, ds_factor_FP);
+    ne = downsample(ne, ds_factor_FP);
+    ne = single(ne);
     ds_sec_signal = downsample(sec_signal, ds_factor_FP); % for plotting
-    nrows_ne = fix(numel(delta465_filt)/NE_sampling_rate);
-
+    ne_frequency = ne_frequency / ds_factor_FP;
 end
 
 %% 4) read sleep scores
@@ -213,7 +204,7 @@ end
 % NB! If there is a systematic time lag between EEG/EMG traces and scoring adjust for it by seconds here
 if ~isempty(sleep_score_file)
     % Assumption: For binary vectors index 1 = time 0-1s, index 2= time 1-2 sec, and so forth
-    sleep_scores = zeros(1, int64(numel(EEG_rawtrace) / eeg_frequency)); 
+    sleep_scores = NaN(1, ceil(numel(eeg) / eeg_frequency), 'single'); 
     EEG_sleepscore = readmatrix(sleep_score_file); % xlsread is not recommended by matlab, using readmatrix instead
     
     % Create binary vectors for sleep stages
@@ -291,9 +282,9 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
     
     %Cutting EEG/EMG traces leading up to first TTL 
     % Removing first seconds of EEG and EMG raw traces to align with FP trace
-    EMG_rawtrace = EMG_rawtrace(onset_EEG_ind:end);
-    EEG_rawtrace = EEG_rawtrace(onset_EEG_ind:end);
-    EEG_time = (0:length(EEG_rawtrace)-1)/eeg_frequency;
+    emg = emg(onset_EEG_ind:end);
+    eeg = eeg(onset_EEG_ind:end);
+    time_eeg = (0:length(eeg)-1)/eeg_frequency;
     
     if ~isempty(sleep_scores)
         % Remove first seconds of EEG score to align with FP trace
@@ -301,20 +292,7 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
     end
 end
 
- %% 6) reshaping EEG, EMG, and NE
-
-% divide by sampling rate to get the duration in seconds
-nrows_eeg = fix(numel(EEG_rawtrace)/EEG_sampling_rate); 
-nrows_emg = fix(numel(EMG_rawtrace)/EMG_sampling_rate);
-nrows = min([nrows_eeg nrows_emg nrows_ne]); % take the smallest duration
-
-trial_eeg = transpose(reshape(EEG_rawtrace(1:nrows*EEG_sampling_rate), [EEG_sampling_rate, nrows]));
-trial_emg = transpose(reshape(EMG_rawtrace(1:nrows*EMG_sampling_rate), [EMG_sampling_rate, nrows]));
-
-if ~isempty(fp_dir)
-    trial_ne = transpose(reshape(delta465_filt(1:nrows*NE_sampling_rate), [NE_sampling_rate, nrows]));
-end
-
+ %% 6) plot (optioinal) and save extracted data to .mat file
 if show_figure
     if ~isempty(fp_dir)
         figure
@@ -336,20 +314,20 @@ if show_figure
         % Plot of the three traces above each other (the index 1000:end removes the
         % first second of the recoding for nicer plotting)
         figure
-        plot(ds_sec_signal, ds_delta465_filt)
+        plot(ds_sec_signal, ne)
         title('NE2m');
 
         figure
         a = subplot(3,1,1);
-            plot(EEG_time, EMG_rawtrace); 
+            plot(time_eeg, emg); 
             xlabel('time (s)');
             ylabel('EMG (V)');
         b = subplot(3,1,2);
-            plot(EEG_time, EEG_rawtrace); 
+            plot(time_eeg, eeg); 
             xlabel('time (s)');
             ylabel('EEG (V)');
         c = subplot(3,1,3);
-            plot(ds_sec_signal, ds_delta465_filt); 
+            plot(ds_sec_signal, ne); 
             xlabel('time (s)');
             ylabel('NE');
         linkaxes([a, b, c],'x');
@@ -358,11 +336,11 @@ if show_figure
         % Plot of EEG and EMG traces
         figure
         h(1) = subplot(2,1,1);
-            plot(EEG_time, EMG_rawtrace); 
+            plot(time_eeg, emg); 
             xlabel('time (s)');
             ylabel('EMG Raw (V)');
         h(2) = subplot(2,1,2);
-            plot(EEG_time, EEG_rawtrace); 
+            plot(time_eeg, eeg); 
             xlabel('time (s)');
             ylabel('EEG Raw (V)');
         linkaxes([h(1),h(2)],'x');
@@ -372,5 +350,5 @@ end
 
 num_class = 3;
 %save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence", "-v7.3")
-save(save_path, "trial_eeg", "trial_emg", "trial_ne", "sleep_scores", "num_class", "eeg_frequency", "ne_frequency")
+save(save_path, "eeg", "emg", "ne", "sleep_scores", "num_class", "eeg_frequency", "ne_frequency")
 end
