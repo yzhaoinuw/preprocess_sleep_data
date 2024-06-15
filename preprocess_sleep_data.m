@@ -106,12 +106,15 @@ ne_frequency = nan;
 % if EEG/EMG come from FP data
 if isempty(exp_file_path)
     fp_data = TDTbin2mat(eeg_emg_path);
-    if ~isfield(fp_data.streams, EEG_stream)
-        disp('Please provide EEG stream in the TDT file.')
-        return
+    while ~isfield(fp_data.streams, EEG_stream)
+        disp(['Invalid EEG stream in the TDT file. You entered', EEG_stream])
+        EEG_stream = input('Please provide a valid EEG stream in the TDT file: ', 's');
+        %return
     end
-    if ~isfield(fp_data.streams, EMG_stream)
-        disp('Please provide EMG stream in the TDT file.')
+
+    while ~isfield(fp_data.streams, EMG_stream)
+        disp(['Invalid EMG stream in the TDT file. You entered ', EMG_stream])
+        EMG_stream = input('Please provide a valid EMG stream in the TDT file: ', 's');
         return
     end
 
@@ -145,6 +148,17 @@ if ~isempty(fp_dir)
     if ~strcmp(fp_dir, eeg_emg_path) % if NE data come from different sources
         fp_data = TDTbin2mat(fp_dir); % data is a struct  
     end
+
+    while ~isfield(fp_data.streams, chan_465)
+        disp(['Invalid chan_465 in the TDT file. You entered ', chan_465])
+        chan_465 = input('Please provide a valid chan_465 in the TDT file: ', 's');
+    end
+
+    while ~isfield(fp_data.streams, chan_405)
+        disp(['Invalid chan_405 in the TDT file. You entered ', chan_405])
+        chan_405 = input('Please provide a valid chan_405 in the TDT file: ', 's');
+    end
+
     ne_frequency = fp_data.streams.(chan_465).fs; % sampling frequency for NE, one number
     signal_465 = fp_data.streams.(chan_465).data; % hSyn-NE, array 1-D
     signal_405 = fp_data.streams.(chan_405).data; % autofluorescence, array, 1-D
@@ -152,6 +166,11 @@ if ~isempty(fp_dir)
     % if different soruces we need to sync it with fp recording
     if ~strcmp(fp_dir, eeg_emg_path)
         % removing FP trace prior to first TTL pulse
+        while ~isfield(fp_data.epocs, chan_ttl_pulse)
+            disp(['Invalid chan_ttl_pulse in the TDT file. You entered ', chan_ttl_pulse])
+            chan_ttl_pulse = input('Please provide a valid chan_ttl_pulse in the TDT file: ', 's');
+        end
+
         TTL_FP = fp_data.epocs.(chan_ttl_pulse).onset; % TTL_FP is the timestamps
         TTL_gap = diff(TTL_FP) > 5 + 1; % the interval of the pulse is 5 seconds 
         if isempty(find(TTL_gap == 1, 1))
