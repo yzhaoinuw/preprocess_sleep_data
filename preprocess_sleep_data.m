@@ -126,8 +126,8 @@ else
     Info=loadEXP(exp_file_path,'no');
     
     TimeReldebSec=0; %start extract data from the beginning (first bin)
-    %TimeRelEndSec=inf; %inf to include all data (until last bin)
-    TimeRelEndSec=Info.BinFiles.Duration; %inf to include all data (including last bin)
+    TimeRelEndSec=inf; %inf to include all data (until last bin)
+    %TimeRelEndSec=Info.BinFiles.Duration; %inf to include all data (including last bin)
     
     [eeg_emg_data,time]=ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
     
