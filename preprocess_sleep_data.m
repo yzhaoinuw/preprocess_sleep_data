@@ -367,7 +367,48 @@ if show_figure
 
 end
 
-num_class = 3;
 %save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence", "-v7.3")
-save(save_path, "eeg", "emg", "ne", "sleep_scores", "num_class", "eeg_frequency", "ne_frequency")
+%% 7) segment (if longer than 5 hours) and save
+num_class = 3;
+hours = length(eeg) / eeg_frequency / 3600;
+n_segments = fix(hours / 5) + 1; % each segment shall not be 5 hours or longer
+remainder = mod(length(eeg), n_segments);
+seg_len = (length(eeg) - remainder) / n_segments;
+eeg = reshape(eeg(1:end-remainder), n_segments, seg_len);
+emg = reshape(emg(1:end-remainder), n_segments, seg_len);
+
+min_sleep_scores_len = hours * 3600;
+fill_array = NaN(1, max([0 min_sleep_scores_len - length(sleep_scores)]));
+sleep_scores = [sleep_scores fill_array];
+sleep_scores_remainder = mod(length(sleep_scores), n_segments);
+sleep_scores = reshape(sleep_scores(1:end-sleep_scores_remainder), n_segments, []);
+
+if ~isempty(ne)
+    min_ne_len = hours * ne_frequency * 3600;
+    fill_array = NaN(1, max([0 min_ne_len - length(ne)]));
+    ne = [ne fill_array];
+    ne_remainder = mod(length(ne), n_segments);
+    ne = reshape(ne(1:end-ne_remainder), n_segments, []);
+end
+
+[folder, save_name, ext] = fileparts(save_path);
+if n_segments > 1
+    for i = 1:n_segments
+        recording.eeg = eeg(i, :);
+        recording.emg = emg(i, :);
+        if ~isempty(ne)
+            recording.ne = ne(i, :);
+        else
+            recording.ne = ne;
+        end
+        recording.sleep_scores = sleep_scores(i, :);
+        recording.num_class = num_class;
+        recording.eeg_frequency = eeg_frequency;
+        recording.ne_frequency = ne_frequency;
+        save_path = fullfile(folder, [save_name '_seg' num2str(i) ext]);
+        save(save_path, "-struct","recording")
+    end
+else
+    save(save_path, "eeg", "emg", "ne", "sleep_scores", "num_class", "eeg_frequency", "ne_frequency")
+end
 end
