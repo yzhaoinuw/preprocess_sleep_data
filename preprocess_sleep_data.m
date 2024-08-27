@@ -377,7 +377,7 @@ seg_len = (length(eeg) - remainder) / n_segments;
 eeg = reshape(eeg(1:end-remainder), n_segments, seg_len);
 emg = reshape(emg(1:end-remainder), n_segments, seg_len);
 
-min_sleep_scores_len = hours * 3600;
+min_sleep_scores_len = ceil(hours * 3600);
 fill_array = NaN(1, max([0 min_sleep_scores_len - length(sleep_scores)]));
 sleep_scores = [sleep_scores fill_array];
 sleep_scores_remainder = mod(length(sleep_scores), n_segments);
