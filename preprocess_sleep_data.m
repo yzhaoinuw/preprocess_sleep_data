@@ -124,9 +124,11 @@ if isempty(exp_file_path)
     emg = fp_data.streams.(EMG_stream).data; %EMG
 else
     Info=loadEXP(exp_file_path,'no');
-    
-    TimeReldebSec=0; %start extract data from the beginning (first bin)
-    TimeRelEndSec=inf; %inf to include all data (until last bin)
+    end_time_array = [Info.BinFiles.Duration];
+    total_duration = sum(end_time_array);
+    bin_filenames = {Info.BinFiles.FileName};
+    TimeReldebSec = 0; %start extract data from the beginning (first bin)
+    TimeRelEndSec = total_duration; % sum the duration of all bins
     %TimeRelEndSec=Info.BinFiles.Duration; %inf to include all data (including last bin)
     
     [eeg_emg_data,time]=ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
@@ -135,7 +137,7 @@ else
     eeg = eeg_emg_data(2,1:end);
     
     %time vector using sampling frequency
-    eeg_frequency = Info.Fs;
+    eeg_frequency = length(eeg) / total_duration;
 end
 
 eeg = single(eeg);
@@ -151,12 +153,18 @@ if ~isempty(fp_dir)
 
     while ~isfield(fp_data.streams, chan_465)
         disp(['Invalid chan_465 in the TDT file. You entered ', chan_465])
-        chan_465 = input('Please provide a valid chan_465 in the TDT file: ', 's');
+        chan_names = fieldnames(fp_data.streams);
+        chan_names_char = sprintf('%s, ', chan_names{:});
+        message = sprintf('Please type a chan_465 name from the list: {%s}\n', chan_names_char(1:end-2));
+        chan_465 = input(message, 's');
     end
 
     while ~isfield(fp_data.streams, chan_405)
         disp(['Invalid chan_405 in the TDT file. You entered ', chan_405])
-        chan_405 = input('Please provide a valid chan_405 in the TDT file: ', 's');
+        chan_names = fieldnames(fp_data.streams);
+        chan_names_char = sprintf('%s, ', chan_names{:});
+        message = sprintf('Please type a chan_405 name from the list: {%s}\n', chan_names_char(1:end-2));
+        chan_405 = input(message, 's');
     end
 
     ne_frequency = fp_data.streams.(chan_465).fs; % sampling frequency for NE, one number
@@ -168,7 +176,10 @@ if ~isempty(fp_dir)
         % removing FP trace prior to first TTL pulse
         while ~isfield(fp_data.epocs, chan_ttl_pulse)
             disp(['Invalid chan_ttl_pulse in the TDT file. You entered ', chan_ttl_pulse])
-            chan_ttl_pulse = input('Please provide a valid chan_ttl_pulse in the TDT file: ', 's');
+            pulse_names = fieldnames(fp_data.epocs);
+            pulse_names_char = sprintf('%s, ', pulse_names{:});
+            message = sprintf('Please type a chan_ttl_pulse name from the list: {%s}\n', pulse_names_char(1:end-2));
+            chan_ttl_pulse = input(message, 's');
         end
 
         TTL_FP = fp_data.epocs.(chan_ttl_pulse).onset; % TTL_FP is the timestamps
@@ -370,42 +381,38 @@ end
 %save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence", "-v7.3")
 %% 7) segment (if longer than 5 hours) and save
 num_class = 3;
-hours = length(eeg) / eeg_frequency / 3600;
-n_segments = fix(hours / 5) + 1; % each segment shall not be 5 hours or longer
-remainder = mod(length(eeg), n_segments);
-seg_len = (length(eeg) - remainder) / n_segments;
-eeg = reshape(eeg(1:end-remainder), n_segments, seg_len);
-emg = reshape(emg(1:end-remainder), n_segments, seg_len);
 
-min_sleep_scores_len = ceil(hours * 3600);
-fill_array = NaN(1, max([0 min_sleep_scores_len - length(sleep_scores)]));
+fill_array = NaN(1, max([0 total_duration - length(sleep_scores)]));
 sleep_scores = [sleep_scores fill_array];
-sleep_scores_remainder = mod(length(sleep_scores), n_segments);
-sleep_scores = reshape(sleep_scores(1:end-sleep_scores_remainder), n_segments, []);
 
 if ~isempty(ne)
-    min_ne_len = hours * ne_frequency * 3600;
-    fill_array = NaN(1, max([0 min_ne_len - length(ne)]));
-    ne = [ne fill_array];
-    ne_remainder = mod(length(ne), n_segments);
-    ne = reshape(ne(1:end-ne_remainder), n_segments, []);
+    min_ne_len = ceil(total_duration * ne_frequency);
+    ne_fill_array = NaN(1, max([0 min_ne_len - length(ne)]));
+    ne = [ne ne_fill_array];
 end
 
-[folder, save_name, ext] = fileparts(save_path);
-if n_segments > 1
-    for i = 1:n_segments
-        recording.eeg = eeg(i, :);
-        recording.emg = emg(i, :);
+[folder, ~, ext] = fileparts(save_path);
+prev_end  = 0;
+n_bins = length(end_time_array);
+if n_bins > 1
+    for i = 1:n_bins
+        time_start = prev_end;
+        time_end = time_start + end_time_array(i);
+        recording.eeg = eeg(time_start*eeg_frequency+1:time_end*eeg_frequency);
+        recording.emg = emg(time_start*eeg_frequency+1:time_end*eeg_frequency);
         if ~isempty(ne)
-            recording.ne = ne(i, :);
+            recording.ne = ne(time_start*ne_frequency+1:time_end*ne_frequency);
         else
             recording.ne = ne;
         end
-        recording.sleep_scores = sleep_scores(i, :);
+        recording.sleep_scores = sleep_scores(time_start+1:time_end);
+        recording.start_time = time_start;
         recording.num_class = num_class;
         recording.eeg_frequency = eeg_frequency;
         recording.ne_frequency = ne_frequency;
-        save_path = fullfile(folder, [save_name '_seg' num2str(i) ext]);
+        bin_filename = bin_filenames{i};
+        [~, bin_save_name, ~] = fileparts(bin_filename);
+        save_path = fullfile(folder, [bin_save_name ext]);
         save(save_path, "-struct","recording")
     end
 else
