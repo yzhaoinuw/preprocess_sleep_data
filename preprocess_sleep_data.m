@@ -398,10 +398,11 @@ if n_bins > 1
     for i = 1:n_bins
         time_start = prev_end;
         time_end = time_start + end_time_array(i);
-        recording.eeg = eeg(time_start*eeg_frequency+1:time_end*eeg_frequency);
-        recording.emg = emg(time_start*eeg_frequency+1:time_end*eeg_frequency);
+        prev_end = time_end;
+        recording.eeg = eeg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
+        recording.emg = emg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
         if ~isempty(ne)
-            recording.ne = ne(time_start*ne_frequency+1:time_end*ne_frequency);
+            recording.ne = ne(floor(time_start*ne_frequency+1):floor(time_end*ne_frequency));
         else
             recording.ne = ne;
         end
