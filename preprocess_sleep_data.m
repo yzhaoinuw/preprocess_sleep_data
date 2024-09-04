@@ -18,7 +18,7 @@ default_chan_405 = '';
 default_chan_ttl_pulse = '';
 default_interval = [];
 default_EEG_stream = '';
-default_EEG_chan = nan;
+default_EEG_chan = 1;
 default_EMG_stream = '';
 default_time_correction = 0;
 default_sleep_score_file = '';
@@ -108,24 +108,38 @@ if isempty(exp_file_path)
     fp_data = TDTbin2mat(eeg_emg_path);
     while ~isfield(fp_data.streams, EEG_stream)
         disp(['Invalid EEG stream in the TDT file. You entered', EEG_stream])
-        EEG_stream = input('Please provide a valid EEG stream in the TDT file: ', 's');
-        %return
+        stream_names = fieldnames(fp_data.streams);
+        stream_names_char = sprintf('%s, ', stream_names{:});
+        message = sprintf('Please type a EEG stream name from the list: {%s}\n', stream_names_char(1:end-2));
+        EEG_stream = input(message, 's');
     end
 
     while ~isfield(fp_data.streams, EMG_stream)
         disp(['Invalid EMG stream in the TDT file. You entered ', EMG_stream])
-        EMG_stream = input('Please provide a valid EMG stream in the TDT file: ', 's');
-        return
+        stream_names = fieldnames(fp_data.streams);
+        stream_names_char = sprintf('%s, ', stream_names{:});
+        message = sprintf('Please type a EMG stream name from the list: {%s}\n', stream_names_char(1:end-2));
+        EMG_stream = input(message, 's');
+
     end
 
     eeg_frequency = fp_data.streams.(EEG_stream).fs; %sampling frequency for EEG signal 
     eeg_data = fp_data.streams.(EEG_stream).data; %EEG signal
     eeg = eeg_data(EEG_chan,:); %add channel (1 or 2)
     emg = fp_data.streams.(EMG_stream).data; %EMG
+    total_duration = floor(length(eeg) / eeg_frequency);
+    n_seg = fix(total_duration / 3600 / 12);
+    remainder = floor(mod(total_duration, 3600 * 12));
+    %disp(['remainder: ' num2str(remainder)])
+    %disp(['n_seg: ' num2str(n_seg)])
+    end_time_array = (1:n_seg) * 3600 * 12; % break into 12 segments if necessary
+    if n_seg > 0
+        end_time_array = [end_time_array remainder + end_time_array(end)];
+    end
 else
     Info=loadEXP(exp_file_path,'no');
     end_time_array = [Info.BinFiles.Duration];
-    total_duration = sum(end_time_array);
+    total_duration = floor(sum(end_time_array));
     bin_filenames = {Info.BinFiles.FileName};
     TimeReldebSec = 0; %start extract data from the beginning (first bin)
     TimeRelEndSec = total_duration; % sum the duration of all bins
@@ -212,8 +226,8 @@ if ~isempty(fp_dir)
     a = reg(1);
     b = reg(2);
     controlFit = a.*signal_405 + b;
-    %[p,~,mu] = polyfit(signal_405(round(mouse{5}*signal_fs));                      % for scaling and centering (matlab 2020b and later)
-    %controlFit = polyval(p,signal_405,[],mu);                                      % for scaling and centering
+    %[p,~,mu] = polyfit(signal_405(round(mouse{5}*signal_fs)); % for scaling and centering (matlab 2020b and later)
+    %controlFit = polyval(p,signal_405,[],mu); % for scaling and centering
     controlFit =  filtfilt(MeanFilter,1,double(controlFit));
     normDat = (signal_465 - controlFit)./controlFit;
     delta_465 = normDat * 100;
@@ -378,10 +392,10 @@ if show_figure
 
 end
 
-%save(save_path, "trial_eeg", "trial_emg", "trial_ne", "pred_labels", "num_class", "confidence", "-v7.3")
 %% 7) segment (if longer than 5 hours) and save
 num_class = 3;
-
+%disp(['total duration: ', num2str(total_duration)])
+%disp(['sleep score len: ', num2str(length(sleep_scores))])
 fill_array = NaN(1, max([0 total_duration - length(sleep_scores)]));
 sleep_scores = [sleep_scores fill_array];
 
@@ -397,7 +411,7 @@ n_bins = length(end_time_array);
 if n_bins > 1
     for i = 1:n_bins
         time_start = prev_end;
-        time_end = time_start + end_time_array(i);
+        time_end = time_start + floor(end_time_array(i));
         prev_end = time_end;
         recording.eeg = eeg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
         recording.emg = emg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
