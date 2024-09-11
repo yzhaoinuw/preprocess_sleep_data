@@ -187,7 +187,7 @@ if ~isempty(fp_dir)
     
     % if different soruces we need to sync it with fp recording
     if ~strcmp(fp_dir, eeg_emg_path)
-        % removing FP trace prior to first TTL pulse
+        % Need to remove FP trace prior to first TTL pulse
         while ~isfield(fp_data.epocs, chan_ttl_pulse)
             disp(['Invalid chan_ttl_pulse in the TDT file. You entered ', chan_ttl_pulse])
             pulse_names = fieldnames(fp_data.epocs);
@@ -206,7 +206,7 @@ if ~isempty(fp_dir)
         
         first_TTL = TTL_onset(1)*ne_frequency; %sampling point # to start with
         onset_FP = round(first_TTL);
-        
+        % remove FP trace prior to first TTL pulse
         signal_465 = signal_465(onset_FP:end);
         signal_405 = signal_405(onset_FP:end);
     end
@@ -336,6 +336,27 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
     end
 end
 
+%% 6) interpolate, extrapolate if there are missing values
+% Find the indices of NaN and non-NaN values
+nan_indices = isnan(eeg);
+if ~isempty(nan_indices)
+    non_nan_indices = ~isnan(eeg);
+    % Perform interpolation to fill NaN values
+    eeg(nan_indices) = interp1(find(non_nan_indices), eeg(non_nan_indices), find(nan_indices), 'linear','extrap');
+end
+
+nan_indices = isnan(emg);
+if ~isempty(nan_indices)
+    non_nan_indices = ~isnan(emg);
+    emg(nan_indices) = interp1(find(non_nan_indices), emg(non_nan_indices), find(nan_indices), 'linear','extrap');
+end
+
+nan_indices = isnan(ne);
+if ~isempty(nan_indices)
+    non_nan_indices = ~isnan(ne);
+    ne(nan_indices) = interp1(find(non_nan_indices), ne(non_nan_indices), find(nan_indices), 'linear','extrap');
+end
+
  %% 6) plot (optioinal) and save extracted data to .mat file
 if show_figure
     if ~isempty(fp_dir)
@@ -392,12 +413,14 @@ if show_figure
 
 end
 
-%% 7) segment (if longer than 5 hours) and save
+%% 7) segment and (if multiple bins from exp file of if longer than 12 hours) save
 num_class = 3;
 %disp(['total duration: ', num2str(total_duration)])
 %disp(['sleep score len: ', num2str(length(sleep_scores))])
-fill_array = NaN(1, max([0 total_duration - length(sleep_scores)]));
-sleep_scores = [sleep_scores fill_array];
+if ~isempty(sleep_scores)
+    fill_array = NaN(1, max([0 total_duration - length(sleep_scores)]));
+    sleep_scores = [sleep_scores fill_array];
+end
 
 if ~isempty(ne)
     min_ne_len = ceil(total_duration * ne_frequency);
@@ -420,7 +443,10 @@ if n_bins > 1
         else
             recording.ne = ne;
         end
-        recording.sleep_scores = sleep_scores(time_start+1:time_end);
+        
+        if ~isempty(sleep_scores)
+            recording.sleep_scores = sleep_scores(time_start+1:time_end);
+        end
         recording.start_time = time_start;
         recording.num_class = num_class;
         recording.eeg_frequency = eeg_frequency;
