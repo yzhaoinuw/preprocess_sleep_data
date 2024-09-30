@@ -132,14 +132,14 @@ if isempty(exp_file_path)
     remainder = floor(mod(total_duration, 3600 * 12));
     %disp(['remainder: ' num2str(remainder)])
     %disp(['n_seg: ' num2str(n_seg)])
-    end_time_array = (1:n_seg) * 3600 * 12; % break into 12 segments if necessary
+    duration_array = (1:n_seg) * 3600 * 12; % break into 12-hour segments if necessary
     if n_seg > 0
-        end_time_array = [end_time_array remainder + end_time_array(end)];
+        duration_array = [duration_array remainder + duration_array(end)];
     end
 else
     Info=loadEXP(exp_file_path,'no');
-    end_time_array = [Info.BinFiles.Duration];
-    total_duration = floor(sum(end_time_array));
+    duration_array = [Info.BinFiles.Duration];
+    total_duration = floor(sum(duration_array));
     bin_filenames = {Info.BinFiles.FileName};
     TimeReldebSec = 0; %start extract data from the beginning (first bin)
     TimeRelEndSec = total_duration; % sum the duration of all bins
@@ -328,6 +328,9 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
     % Removing first seconds of EEG and EMG raw traces to align with FP trace
     emg = emg(onset_EEG_ind:end);
     eeg = eeg(onset_EEG_ind:end);
+    total_duration = floor(length(eeg) / eeg_frequency);
+    duration_array(1) = duration_array(1) - round(onset_EEG);
+
     time_eeg = (0:length(eeg)-1)/eeg_frequency;
     
     if ~isempty(sleep_scores)
@@ -430,11 +433,11 @@ end
 
 [folder, ~, ext] = fileparts(save_path);
 prev_end  = 0;
-n_bins = length(end_time_array);
+n_bins = length(duration_array);
 if n_bins > 1
     for i = 1:n_bins
         time_start = prev_end;
-        time_end = time_start + floor(end_time_array(i));
+        time_end = time_start + floor(duration_array(i));
         prev_end = time_end;
         recording.eeg = eeg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
         recording.emg = emg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
