@@ -319,7 +319,9 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
         if isempty(find(TTL_pulse_time_gap, 1))
             onset_EEG = TTL_pulse_time(1);
         else 
-            onset_EEG = TTL_pulse_time(find(TTL_pulse_time_gap, 1)+1);
+            % this assumes the "full" setup option for ttl pulse, meaning
+            % the ttl pulse was active throughout the fp recording
+            onset_EEG = TTL_pulse_time(find(TTL_pulse_time_gap, 1)+1); 
         end    
         onset_EEG_ind = round(onset_EEG*eeg_frequency);
     end
@@ -330,7 +332,6 @@ if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
     eeg = eeg(onset_EEG_ind:end);
     total_duration = floor(length(eeg) / eeg_frequency);
     duration_array(1) = duration_array(1) - round(onset_EEG);
-
     time_eeg = (0:length(eeg)-1)/eeg_frequency;
     
     if ~isempty(sleep_scores)
