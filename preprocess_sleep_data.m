@@ -138,20 +138,21 @@ if isempty(exp_file_path)
     end
 else
     Info=loadEXP(exp_file_path,'no');
-    duration_array = [Info.BinFiles.Duration];
-    total_duration = floor(sum(duration_array));
     bin_filenames = {Info.BinFiles.FileName};
     TimeReldebSec = 0; %start extract data from the beginning (first bin)
-    TimeRelEndSec = total_duration; % sum the duration of all bins
-    %TimeRelEndSec=Info.BinFiles.Duration; %inf to include all data (including last bin)
-    
+    % use inf as the end time instead of summing the duration of all bins
+    % because duration includes gaps between nins and thus not accurate
+    TimeRelEndSec = Inf; 
     [eeg_emg_data,time]=ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
-    
     emg = eeg_emg_data(1,1:end);
     eeg = eeg_emg_data(2,1:end);
+    eeg_frequency = Info.Fs;
+    start_time = [Info.BinFiles.TStart];
+    total_duration = length(eeg) / eeg_frequency;
     
-    %time vector using sampling frequency
-    eeg_frequency = length(eeg) / total_duration;
+    duration_array = diff(start_time) * 24 * 3600;
+    duration_array = [duration_array total_duration - sum(duration_array)];
+
 end
 
 eeg = single(eeg);
