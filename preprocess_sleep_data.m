@@ -20,6 +20,7 @@ default_interval = [];
 default_EEG_stream = '';
 default_EEG_chan = 1;
 default_EMG_stream = '';
+default_ds_factor_FP = 100;
 default_time_correction = 0;
 default_sleep_score_file = '';
 default_save_path = '';
@@ -33,6 +34,7 @@ addParameter(p, 'chan_465', default_chan_465, @ischar);
 addParameter(p, 'chan_405', default_chan_405, @ischar);
 addParameter(p, 'chan_ttl_pulse', default_chan_ttl_pulse, @ischar);
 addParameter(p, 'interval', default_interval, @isvector);
+addParameter(p, 'ds_factor_FP', default_ds_factor_FP, @isnumeric);
 addParameter(p, 'time_correction', default_time_correction, @isnumeric);
 addParameter(p, 'sleep_score_file', default_sleep_score_file, @ischar);
 addParameter(p, 'save_path', default_save_path, @ischar);
@@ -53,6 +55,7 @@ chan_465 = p.Results.chan_465;
 chan_405 = p.Results.chan_405;
 chan_ttl_pulse = p.Results.chan_ttl_pulse;
 interval = p.Results.interval;
+ds_factor_FP = p.Results.ds_factor_FP;
 time_correction = p.Results.time_correction;
 sleep_score_file = p.Results.sleep_score_file;
 save_path = p.Results.save_path;
@@ -237,7 +240,6 @@ if ~isempty(fp_dir)
     ne = filtfilt(MeanFilter,1,double(delta_465));
     
     % downsample NE
-    ds_factor_FP = 100; % also used for plotting later (section 9b)
     ne = downsample(ne, ds_factor_FP);
     ne = single(ne);
     ds_sec_signal = downsample(sec_signal, ds_factor_FP); % for plotting
