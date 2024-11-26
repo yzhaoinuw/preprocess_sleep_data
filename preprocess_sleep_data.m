@@ -96,7 +96,7 @@ else % if there's fp data
 end    
 
 if isempty(save_path)
-    save_path = fullfile(parent_dir, filename);
+    save_path = fullfile(parent_dir, strcat(filename, ".mat"));
 end
 
 % define the following optional variables
@@ -434,7 +434,7 @@ if ~isempty(ne)
 end
 
 
-[folder, data_name, ext] = fileparts(save_path);
+[parent_dir, data_name, ext] = fileparts(save_path);
 prev_end  = 0;
 n_bins = length(duration_array);
 if n_bins > 1
@@ -459,7 +459,7 @@ if n_bins > 1
         recording.ne_frequency = ne_frequency;
         bin_filename = bin_filenames{i};
         [~, bin_save_name, ~] = fileparts(bin_filename);
-        save_path = fullfile(folder, data_name, [bin_save_name ext]);
+        save_path = fullfile(parent_dir, strcat(data_name, '_', bin_save_name, ".mat"));
         save(save_path, "-struct","recording")
     end
 else
