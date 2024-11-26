@@ -12,7 +12,7 @@ p = inputParser;
 
 addRequired(p, 'eeg_emg_path', @ischar);
 
-default_fp_dir = '';
+default_ne_dir = '';
 default_chan_465 = '';
 default_chan_405 = '';
 default_chan_ttl_pulse = '';
@@ -26,7 +26,7 @@ default_sleep_score_file = '';
 default_save_path = '';
 default_show_figure = false;
 
-addParameter(p, 'fp_dir', default_fp_dir, @ischar);
+addParameter(p, 'ne_dir', default_ne_dir, @ischar);
 addParameter(p, 'EEG_stream', default_EEG_stream, @ischar);
 addParameter(p, 'EEG_chan', default_EEG_chan, @isnumeric);
 addParameter(p, 'EMG_stream', default_EMG_stream, @ischar);
@@ -47,7 +47,7 @@ parse(p, varargin{:})
 eeg_emg_path = p.Results.eeg_emg_path;
 [~,data_name,~] = fileparts(eeg_emg_path);
 
-fp_dir = p.Results.fp_dir;
+ne_dir = p.Results.ne_dir;
 EEG_stream = p.Results.EEG_stream;
 EEG_chan = p.Results.EEG_chan;
 EMG_stream = p.Results.EMG_stream;
@@ -69,8 +69,8 @@ else % EEG/EMG come from FP data
     exp_file_path = '';
 end
 
-if isempty(fp_dir) 
-    if isempty(exp_file_path)    
+if isempty(ne_dir) 
+    if isempty(eeg_emg_path)    
         disp('No exp or TDT files found. Please check the path provided.')
         return
     end
@@ -87,7 +87,7 @@ else % if there's fp data
 
     % if EMG/EEG and NE come from different sources, must provide ttl pulse
     % for synchronization
-    if ~strcmp(eeg_emg_path, fp_dir) 
+    if ~strcmp(eeg_emg_path, ne_dir) 
         if isempty(chan_ttl_pulse)
             disp('Please provide TTL pulse channel to sync EEG/EMG with the fp data')
             return
@@ -96,7 +96,7 @@ else % if there's fp data
 end    
 
 if isempty(save_path)
-    save_path = [data_name '.mat'];
+    save_path = fullfile(parent_dir, filename);
 end
 
 % define the following optional variables
@@ -131,14 +131,13 @@ if isempty(exp_file_path)
     eeg = eeg_data(EEG_chan,:); %add channel (1 or 2)
     emg = fp_data.streams.(EMG_stream).data; %EMG
     total_duration = floor(length(eeg) / eeg_frequency);
-    n_seg = fix(total_duration / 3600 / 12);
-    remainder = floor(mod(total_duration, 3600 * 12));
+    n_seg = ceil(total_duration / 3600 / 12);
+    extra_seconds = ceil(n_seg *  3600 * 12 - total_duration);
     %disp(['remainder: ' num2str(remainder)])
     %disp(['n_seg: ' num2str(n_seg)])
-    duration_array = (1:n_seg) * 3600 * 12; % break into 12-hour segments if necessary
-    if n_seg > 0
-        duration_array = [duration_array remainder + duration_array(end)];
-    end
+    duration_array = 3600 * 12 * ones(1, n_seg); % break into 12-hour segments if necessary
+    duration_array(end) = duration_array(end) - extra_seconds;
+    bin_filenames = "bin_" + string(1:n_seg);
 else
     Info=loadEXP(exp_file_path,'no');
     bin_filenames = {Info.BinFiles.FileName};
@@ -146,13 +145,12 @@ else
     % use inf as the end time instead of summing the duration of all bins
     % because duration includes gaps between nins and thus not accurate
     TimeRelEndSec = Inf; 
-    [eeg_emg_data,time]=ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
+    [eeg_emg_data, time] = ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
     emg = eeg_emg_data(1,1:end);
     eeg = eeg_emg_data(2,1:end);
     eeg_frequency = Info.Fs;
     start_time = [Info.BinFiles.TStart];
     total_duration = length(eeg) / eeg_frequency;
-    
     duration_array = diff(start_time) * 24 * 3600;
     duration_array = [duration_array total_duration - sum(duration_array)];
 
@@ -164,9 +162,9 @@ time_eeg = (0:length(eeg)-1)/eeg_frequency;
 
 %% 3) Load FP (fiber_photometry) data (batch II)
 
-if ~isempty(fp_dir)
-    if ~strcmp(fp_dir, eeg_emg_path) % if NE data come from different sources
-        fp_data = TDTbin2mat(fp_dir); % data is a struct  
+if ~isempty(ne_dir)
+    if ~strcmp(ne_dir, eeg_emg_path) % if NE data come from different sources
+        fp_data = TDTbin2mat(ne_dir); % data is a struct  
     end
 
     while ~isfield(fp_data.streams, chan_465)
@@ -190,7 +188,7 @@ if ~isempty(fp_dir)
     signal_405 = fp_data.streams.(chan_405).data; % autofluorescence, array, 1-D
     
     % if different soruces we need to sync it with fp recording
-    if ~strcmp(fp_dir, eeg_emg_path)
+    if ~strcmp(ne_dir, eeg_emg_path)
         % Need to remove FP trace prior to first TTL pulse
         while ~isfield(fp_data.epocs, chan_ttl_pulse)
             disp(['Invalid chan_ttl_pulse in the TDT file. You entered ', chan_ttl_pulse])
@@ -308,7 +306,7 @@ end
 %% 5) Alingment of EEG recording and FP recording
 % if EEG/EMG and fp data come from different sources, align them using the
 % TTL pulse.
-if ~isempty(fp_dir) && ~strcmp(eeg_emg_path, fp_dir)
+if ~isempty(ne_dir) && ~strcmp(eeg_emg_path, ne_dir)
     % TTL pulse from FP
     TTL_pulse = eeg_emg_data(3,1:end); % the actual pulse time series
     TTL_pulse_indices = find(diff(TTL_pulse>1*10^-3)==1);
@@ -366,7 +364,7 @@ end
 
  %% 6) plot (optioinal) and save extracted data to .mat file
 if show_figure
-    if ~isempty(fp_dir)
+    if ~isempty(ne_dir)
         figure
         a = subplot(4,1,1);
         plot(sec_signal(1000:end), signal_405(1000:end));
@@ -435,7 +433,8 @@ if ~isempty(ne)
     ne = [ne ne_fill_array];
 end
 
-[folder, ~, ext] = fileparts(save_path);
+
+[folder, data_name, ext] = fileparts(save_path);
 prev_end  = 0;
 n_bins = length(duration_array);
 if n_bins > 1
@@ -460,7 +459,7 @@ if n_bins > 1
         recording.ne_frequency = ne_frequency;
         bin_filename = bin_filenames{i};
         [~, bin_save_name, ~] = fileparts(bin_filename);
-        save_path = fullfile(folder, [bin_save_name ext]);
+        save_path = fullfile(folder, data_name, [bin_save_name ext]);
         save(save_path, "-struct","recording")
     end
 else
