@@ -2,9 +2,10 @@
 % updated 18 January 2023 by Doug Kelley for compatibility with Unix and paths on
 % BlueHive.): 
 % a script for preprocessing vital signs that indicate sleep state.  
-% major modification by Yue Zhao in March, 2024 to add flexibility regarding
+% major modification by Yue Zhao since March, 2024 to add flexibility regarding
 % NE and sleep scores input. See https://github.com/yzhaoinuw/preprocess_sleep_data/tree/dev
 % if you have issues accessing, please email Yue at yuezhao@rochester.edu
+% $Version: 0.2.6
 
 function [] = preprocess_sleep_data(varargin)
 %% 1) Define args and params
