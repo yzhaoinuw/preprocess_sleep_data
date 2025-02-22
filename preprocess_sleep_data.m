@@ -104,6 +104,7 @@ end
 sleep_scores = [];
 ne = [];
 ne_frequency = nan;
+onset_EEG = 0;
 
 %% 2) loading and plotting EEG and EMG raw data
 
@@ -139,9 +140,13 @@ if isempty(exp_file_path)
     duration_array = 3600 * 12 * ones(1, n_seg); % break into 12-hour segments if necessary
     duration_array(end) = duration_array(end) - extra_seconds;
     bin_filenames = "bin_" + string(1:n_seg);
+    video_names = strings(1, n_seg);
+    video_dirs = strings(1,n_seg);
 else
     Info=loadEXP(exp_file_path,'no');
     bin_filenames = {Info.BinFiles.FileName};
+    video_names = {Info.VideosFiles.Files.FileName};
+    video_dirs = {Info.VideosFiles.Files.Dir};
     TimeReldebSec = 0; %start extract data from the beginning (first bin)
     % use inf as the end time instead of summing the duration of all bins
     % because duration includes gaps between nins and thus not accurate
@@ -150,9 +155,9 @@ else
     emg = eeg_emg_data(1,1:end);
     eeg = eeg_emg_data(2,1:end);
     eeg_frequency = Info.Fs;
-    start_time = [Info.BinFiles.TStart];
+    eeg_start_time = [Info.BinFiles.TStart];
     total_duration = length(eeg) / eeg_frequency;
-    duration_array = diff(start_time) * 24 * 3600;
+    duration_array = diff(eeg_start_time) * 24 * 3600;
     duration_array = [duration_array total_duration - sum(duration_array)];
 
 end
@@ -304,7 +309,7 @@ if ~isempty(sleep_score_file)
     end
 end
 
-%% 5) Alingment of EEG recording and FP recording
+%% 5) Alingment of EEG recording with respect to FP recording
 % if EEG/EMG and fp data come from different sources, align them using the
 % TTL pulse.
 if ~isempty(ne_dir) && ~strcmp(eeg_emg_path, ne_dir)
@@ -419,7 +424,7 @@ if show_figure
 
 end
 
-%% 7) segment and (if multiple bins from exp file of if longer than 12 hours) save
+%% 7) segment and (if multiple bins from exp file or if longer than 12 hours) save
 num_class = 3;
 %disp(['total duration: ', num2str(total_duration)])
 %disp(['sleep score len: ', num2str(length(sleep_scores))])
@@ -440,30 +445,42 @@ prev_end  = 0;
 n_bins = length(duration_array);
 if n_bins > 1
     for i = 1:n_bins
-        time_start = prev_end;
-        time_end = time_start + floor(duration_array(i));
+        start_time = prev_end;
+        time_end = start_time + floor(duration_array(i));
         prev_end = time_end;
-        recording.eeg = eeg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
-        recording.emg = emg(floor(time_start*eeg_frequency+1):floor(time_end*eeg_frequency));
+        recording.eeg = eeg(floor(start_time*eeg_frequency+1):floor(time_end*eeg_frequency));
+        recording.emg = emg(floor(start_time*eeg_frequency+1):floor(time_end*eeg_frequency));
         if ~isempty(ne)
-            recording.ne = ne(floor(time_start*ne_frequency+1):floor(time_end*ne_frequency));
+            recording.ne = ne(floor(start_time*ne_frequency+1):floor(time_end*ne_frequency));
         else
             recording.ne = ne;
         end
         
         if ~isempty(sleep_scores)
-            recording.sleep_scores = sleep_scores(time_start+1:time_end);
+            recording.sleep_scores = sleep_scores(start_time+1:time_end);
         end
-        recording.start_time = time_start;
+        
+        recording.start_time = start_time;
         recording.num_class = num_class;
         recording.eeg_frequency = eeg_frequency;
         recording.ne_frequency = ne_frequency;
+        recording.video_name = video_names{i};
+        recording.video_path = fullfile(video_dirs{i}, video_names{i});
+        if i == 1
+            recording.video_start_time = round(onset_EEG);
+        else
+            recording.video_start_time = 0;
+        end
         bin_filename = bin_filenames{i};
         [~, bin_save_name, ~] = fileparts(bin_filename);
         save_path = fullfile(parent_dir, strcat(data_name, '_', bin_save_name, ".mat"));
         save(save_path, "-struct","recording")
     end
 else
-    save(save_path, "eeg", "emg", "ne", "sleep_scores", "num_class", "eeg_frequency", "ne_frequency")
+    start_time = 0;
+    video_start_time = round(onset_EEG);
+    video_name = video_names{1};
+    video_path = fullfile(video_dirs{1}, video_names{1});
+    save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")
 end
 end
