@@ -46,8 +46,7 @@ parse(p, varargin{:})
 
 % Access the variables.
 eeg_emg_path = p.Results.eeg_emg_path;
-[~,data_name,~] = fileparts(eeg_emg_path);
-
+%[~,data_name,~] = fileparts(eeg_emg_path);
 ne_dir = p.Results.ne_dir;
 EEG_stream = p.Results.EEG_stream;
 EEG_chan = p.Results.EEG_chan;

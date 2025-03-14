@@ -87,7 +87,7 @@ assert(all(timeSteps(1:end-1) == timeSteps(1)), 'Sampling rate of EEG/EMG change
 eegCol = data_table.(eeg_col);
 eeg = vertcat(eegCol{:});
 epoch1 = eegCol{1};
-eegFrequency = length(epoch1) / timeSteps(1);
+eeg_frequency = length(epoch1) / timeSteps(1);
 
 emgCol = data_table.(emg_col);
 emg = vertcat(emgCol{:});
@@ -98,14 +98,14 @@ pulseRiseInd = find(contains(pulses.Annotations, 'TTL: Rise'));
 %pulseFallInd = find(contains(pulses.Annotations, 'TTL: Fall'));
 pulseRise = seconds(pulses.Onset(pulseRiseInd));
 %pulseFall = seconds(pulses.Onset(pulseFallInd));
-pulseOnsetInd = round(pulseRise(1) * eegFrequency);
+pulseOnsetInd = round(pulseRise(1) * eeg_frequency);
 
 eeg = eeg(pulseOnsetInd:end);
 emg = emg(pulseOnsetInd:end);
 eeg = single(eeg);
 emg = single(emg);
 
-timeEEG = (0:length(eeg)-1)/eegFrequency;
+timeEEG = (0:length(eeg)-1)/eeg_frequency;
 %% 2) extract fp data from TDT and sync with Sirenia
 
 fpData = TDTbin2mat(fp_dir); % data is a struct 
@@ -115,13 +115,13 @@ fpData = TDTbin2mat(fp_dir); % data is a struct
 %ttlOffsetDiff = diff(ttlPulseOffsets);
 %ttlDiff = ttlPulseOffsets - ttlPulseOnsets;
 
-neFrequency = fpData.streams.(chan_465).fs; % sampling frequency for NE, one number
+ne_frequency = fpData.streams.(chan_465).fs; % sampling frequency for NE, one number
 signal_465 = fpData.streams.(chan_465).data; % hSyn-NE, array 1-D
 signal_405 = fpData.streams.(chan_405).data; % autofluorescence, array, 1-D
 ttlFP = fpData.epocs.(chan_ttl_pulse).onset; % TTL_FP is the timestamps
 ttlOnset = ttlFP(1); % just keep it simple and take the first one for now
 
-onsetFPInd = ttlOnset(1)*neFrequency; %sampling point # to start with
+onsetFPInd = ttlOnset(1)*ne_frequency; %sampling point # to start with
 onsetFPInd = round(onsetFPInd);
 % remove FP trace prior to first TTL pulse
 signal_465 = signal_465(onsetFPInd:end);
@@ -147,8 +147,8 @@ ne = filtfilt(MeanFilter,1,double(delta_465));
 % downsample NE
 ne = downsample(ne, ds_factor_FP);
 ne = single(ne);
-neFrequency = neFrequency / ds_factor_FP;
-timeNE = (0:length(ne)-1)/neFrequency;
+ne_frequency = ne_frequency / ds_factor_FP;
+timeNE = (0:length(ne)-1)/ne_frequency;
 
 %% 3) plot
 if show_figure
@@ -171,4 +171,4 @@ end
 %% 4) save data
 num_class = 3;
 video_start_time = round(ttlOnset);
-save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eegFrequency", "neFrequency", "video_name", "video_path")
+save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")
