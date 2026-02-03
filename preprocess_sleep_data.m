@@ -212,7 +212,7 @@ if ~isempty(ne_dir)
         end
         
         first_TTL = TTL_onset(1)*ne_frequency; %sampling point # to start with
-        onset_FP = round(first_TTL);
+        onset_FP = max(1, round(first_TTL)); % start index has to be at least 1
         % remove FP trace prior to first TTL pulse
         signal_465 = signal_465(onset_FP:end);
         signal_405 = signal_405(onset_FP:end);
@@ -362,7 +362,7 @@ if ~isempty(nan_indices)
 end
 
 nan_indices = isnan(ne);
-if ~isempty(nan_indices)
+if any(nan_indices)
     non_nan_indices = ~isnan(ne);
     ne(nan_indices) = interp1(find(non_nan_indices), ne(non_nan_indices), find(nan_indices), 'linear','extrap');
 end
