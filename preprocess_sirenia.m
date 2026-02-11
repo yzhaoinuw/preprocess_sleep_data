@@ -17,6 +17,7 @@ default_chan_ttl_pulse = 'PC0_';
 default_ds_factor_FP = 100;
 default_save_path = '';
 default_show_figure = false;
+default_interval = [];
 
 addParameter(p, 'edf_file', default_edf_file, @ischar);
 addParameter(p, 'eeg_col', default_eeg_col, @ischar);
@@ -27,6 +28,7 @@ addParameter(p, 'chan_ttl_pulse', default_chan_ttl_pulse, @ischar);
 addParameter(p, 'ds_factor_FP', default_ds_factor_FP, @isnumeric);
 addParameter(p, 'save_path', default_save_path, @ischar);
 addParameter(p, 'show_figure', default_show_figure, @islogical);
+addParameter(p, 'interval', default_interval, @isnumeric);
 
 % Parse the inputs.
 parse(p, varargin{:})
@@ -43,6 +45,7 @@ chan_ttl_pulse = p.Results.chan_ttl_pulse;
 ds_factor_FP = p.Results.ds_factor_FP;
 save_path = p.Results.save_path;
 show_figure = p.Results.show_figure;
+interval = p.Results.interval;
 
 %edf_file = 'C:\Users\yzhao\matlab_projects\pinnacle\Isabelle_M1_Fi21-4hPostICH_M2Fi1PreICH\M1_Fi2PostICH-M2Fi1Pre.edf';
 %fp_dir = 'C:\Users\yzhao\matlab_projects\pinnacle\Isabelle_M1_Fi21-4hPostICH_M2Fi1PreICH';
@@ -149,6 +152,21 @@ ne = downsample(ne, ds_factor_FP);
 ne = single(ne);
 ne_frequency = ne_frequency / ds_factor_FP;
 timeNE = (0:length(ne)-1)/ne_frequency;
+
+%% 2b) trim to interval if specified (interval is time in seconds)
+if ~isempty(interval)
+    t_start = interval(1);
+    t_end = interval(2);
+
+    eeg_mask = (timeEEG >= t_start) & (timeEEG <= t_end);
+    eeg = eeg(eeg_mask);
+    emg = emg(eeg_mask);
+    timeEEG = timeEEG(eeg_mask);
+
+    ne_mask = (timeNE >= t_start) & (timeNE <= t_end);
+    ne = ne(ne_mask);
+    timeNE = timeNE(ne_mask);
+end
 
 %% 3) plot
 if show_figure
