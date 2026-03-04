@@ -121,7 +121,7 @@ fpData = TDTbin2mat(fp_dir); % data is a struct
 ne_frequency = fpData.streams.(chan_465).fs; % sampling frequency for NE, one number
 signal_465 = fpData.streams.(chan_465).data; % hSyn-NE, array 1-D
 signal_405 = fpData.streams.(chan_405).data; % autofluorescence, array, 1-D
-ttlFP = fpData.epocs.(chan_ttl_pulse).onset; % TTL_FP is the timestamps
+ttlFP = fpData.epocs.(chan_ttl_pulse).onset; % ttlFP is the timestamps
 ttlOnset = ttlFP(1); % just keep it simple and take the first one for now
 
 onsetFPInd = ttlOnset(1)*ne_frequency; %sampling point # to start with
@@ -134,7 +134,7 @@ signal_405 = signal_405(onsetFPInd:end);
 MeanFilterOrder = 1000; % for smoothing
 MeanFilter = ones(MeanFilterOrder,1)/MeanFilterOrder;
 
-reg = polyfit(signal_405(1:end), signal_465(1:end), 1);
+reg = polyfit(signal_405, signal_465, 1);
 a = reg(1);
 b = reg(2);
 controlFit = a.*signal_405 + b;
@@ -153,10 +153,13 @@ ne = single(ne);
 ne_frequency = ne_frequency / ds_factor_FP;
 timeNE = (0:length(ne)-1)/ne_frequency;
 
+% sync video start time
+video_start_time = ttlOnset;
 %% 2b) trim to interval if specified (interval is time in seconds)
 if ~isempty(interval)
     t_start = interval(1);
     t_end = interval(2);
+    video_start_time = video_start_time + t_start;
 
     eeg_mask = (timeEEG >= t_start) & (timeEEG <= t_end);
     eeg = eeg(eeg_mask);
@@ -171,22 +174,20 @@ end
 %% 3) plot
 if show_figure
     figure
-    a = subplot(3,1,1);
-        plot(timeEEG, emg); 
-        xlabel('time (s)');
-        ylabel('EMG (V)');
-    b = subplot(3,1,2);
-        plot(timeEEG, eeg); 
-        xlabel('time (s)');
-        ylabel('EEG (V)');
-    c = subplot(3,1,3);
-        plot(timeNE, ne); 
-        xlabel('time (s)');
-        ylabel('NE');
-    linkaxes([a, b, c],'x');
+    tiledlayout(3, 1, 'TileSpacing', 'compact');
+    
+    a = nexttile;
+        plot(timeEEG, emg);
+        xlabel('time (s)'); ylabel('EMG (V)');
+    b = nexttile;
+        plot(timeEEG, eeg);
+        xlabel('time (s)'); ylabel('EEG (V)');
+    c = nexttile;
+        plot(timeNE, ne);
+        xlabel('time (s)'); ylabel('NE');
+    linkaxes([a, b, c], 'x');
 end
 
 %% 4) save data
 num_class = 3;
-video_start_time = round(ttlOnset);
 save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")

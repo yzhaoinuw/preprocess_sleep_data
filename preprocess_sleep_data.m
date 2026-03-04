@@ -17,7 +17,7 @@ default_ne_dir = '';
 default_chan_465 = '';
 default_chan_405 = '';
 default_chan_ttl_pulse = '';
-default_interval = [];
+default_fit_interval = [];
 default_EEG_stream = '';
 default_EEG_chan = 1;
 default_EMG_stream = '';
@@ -34,7 +34,7 @@ addParameter(p, 'EMG_stream', default_EMG_stream, @ischar);
 addParameter(p, 'chan_465', default_chan_465, @ischar);
 addParameter(p, 'chan_405', default_chan_405, @ischar);
 addParameter(p, 'chan_ttl_pulse', default_chan_ttl_pulse, @ischar);
-addParameter(p, 'interval', default_interval, @isvector);
+addParameter(p, 'fit_interval', default_fit_interval, @isvector);
 addParameter(p, 'ds_factor_FP', default_ds_factor_FP, @isnumeric);
 addParameter(p, 'time_correction', default_time_correction, @isnumeric);
 addParameter(p, 'sleep_score_file', default_sleep_score_file, @ischar);
@@ -54,7 +54,7 @@ EMG_stream = p.Results.EMG_stream;
 chan_465 = p.Results.chan_465;
 chan_405 = p.Results.chan_405;
 chan_ttl_pulse = p.Results.chan_ttl_pulse;
-interval = p.Results.interval;
+fit_interval = p.Results.fit_interval;
 ds_factor_FP = p.Results.ds_factor_FP;
 time_correction = p.Results.time_correction;
 sleep_score_file = p.Results.sleep_score_file;
@@ -225,10 +225,10 @@ if ~isempty(ne_dir)
     fs_signal = 1:1:length(signal_465);
     sec_signal = fs_signal/ne_frequency;
     
-    if isempty(interval)
+    if isempty(fit_interval)
         reg = polyfit(signal_405(1:end), signal_465(1:end), 1);
     else
-        reg = polyfit(signal_405(round(interval*ne_frequency)), signal_465(round(interval*ne_frequency)), 1);
+        reg = polyfit(signal_405(round(fit_interval*ne_frequency)), signal_465(round(fit_interval*ne_frequency)), 1);
     end
     a = reg(1);
     b = reg(2);
