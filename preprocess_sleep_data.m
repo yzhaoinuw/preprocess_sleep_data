@@ -5,7 +5,7 @@
 % major modification by Yue Zhao since March, 2024 to add flexibility regarding
 % NE and sleep scores input. See https://github.com/yzhaoinuw/preprocess_sleep_data/tree/dev
 % if you have issues accessing, please email Yue at yuezhao@rochester.edu
-% $Version: 0.2.6
+% $Version: 0.2.8
 
 function [] = preprocess_sleep_data(varargin)
 %% 1) Define args and params
@@ -26,6 +26,7 @@ default_time_correction = 0;
 default_sleep_score_file = '';
 default_save_path = '';
 default_show_figure = false;
+default_video_alignment = 'metadata';
 
 addParameter(p, 'ne_dir', default_ne_dir, @ischar);
 addParameter(p, 'EEG_stream', default_EEG_stream, @ischar);
@@ -40,6 +41,7 @@ addParameter(p, 'time_correction', default_time_correction, @isnumeric);
 addParameter(p, 'sleep_score_file', default_sleep_score_file, @ischar);
 addParameter(p, 'save_path', default_save_path, @ischar);
 addParameter(p, 'show_figure', default_show_figure, @islogical);
+addParameter(p, 'video_alignment', default_video_alignment, @(x) ischar(x) || isstring(x));
 
 % Parse the inputs.
 parse(p, varargin{:})
@@ -60,6 +62,8 @@ time_correction = p.Results.time_correction;
 sleep_score_file = p.Results.sleep_score_file;
 save_path = p.Results.save_path;
 show_figure = p.Results.show_figure;
+% Kept for compatibility with v0.2.7 calls; Viewpoint video alignment now uses metadata starts.
+validatestring(p.Results.video_alignment, {'metadata', 'start', 'end'}, mfilename, 'video_alignment');
 
 % determine eeg_emg_path is .exp or from fp data  
 [parent_dir, filename, ext] = fileparts(eeg_emg_path);
@@ -104,6 +108,7 @@ sleep_scores = [];
 ne = [];
 ne_frequency = nan;
 onset_EEG = 0;
+viewpoint_video_start_time = 0;
 
 %% 2) loading and plotting EEG and EMG raw data
 
@@ -144,13 +149,21 @@ if isempty(exp_file_path)
 else
     Info=loadEXP(exp_file_path,'no');
     bin_filenames = {Info.BinFiles.FileName};
-    video_names = {Info.VideosFiles.Files.FileName};
-    video_dirs = {Info.VideosFiles.Files.Dir};
+    viewpoint_video_files = [Info.VideosFiles.Files];
+    video_names = {viewpoint_video_files.FileName};
+    video_dirs = {viewpoint_video_files.Dir};
     TimeReldebSec = 0; %start extract data from the beginning (first bin)
-    % use inf as the end time instead of summing the duration of all bins
-    % because duration includes gaps between nins and thus not accurate
-    TimeRelEndSec = Inf; 
-    [eeg_emg_data, time] = ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
+    if isscalar(Info.BinFiles)
+        TimeRelEndSec = Info.BinFiles(1).Duration;
+    else
+        % Use inf for multi-bin exports until bin/video alignment is checked there.
+        TimeRelEndSec = Inf;
+    end
+    if isempty(ne_dir) && isscalar(Info.BinFiles) && isscalar(viewpoint_video_files)
+        viewpoint_video_start_time = ...
+            (Info.BinFiles(1).TStart - viewpoint_video_files(1).TStart) * 24 * 3600;
+    end
+    [eeg_emg_data, ~] = ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
     emg = eeg_emg_data(1,1:end);
     eeg = eeg_emg_data(2,1:end);
     eeg_frequency = Info.Fs;
@@ -439,7 +452,7 @@ if ~isempty(ne)
 end
 
 
-[parent_dir, data_name, ext] = fileparts(save_path);
+[parent_dir, data_name, ~] = fileparts(save_path);
 prev_end  = 0;
 n_bins = length(duration_array);
 if n_bins > 1
@@ -477,7 +490,12 @@ if n_bins > 1
     end
 else
     start_time = 0;
-    video_start_time = round(onset_EEG);
+    single_viewpoint_video = ~isempty(exp_file_path) && isempty(ne_dir) && n_bins == 1;
+    if single_viewpoint_video
+        video_start_time = viewpoint_video_start_time;
+    else
+        video_start_time = round(onset_EEG);
+    end
     video_name = video_names{1};
     video_path = fullfile(video_dirs{1}, video_names{1});
     save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")
