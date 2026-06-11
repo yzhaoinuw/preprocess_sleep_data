@@ -73,7 +73,7 @@ project_root/
 - `LoadFPandEEG_Klaudia.m`, `Sleep_comp_3_groups.m`, and small `test_*.m` scripts - reference or ad hoc analysis scripts unless a task specifically names them.
 - `EEGtoolbox/` - large helper toolbox. Read targeted files only when the active function calls them or metadata behavior needs confirmation.
 
-## Video Alignment Mental Model
+## Segmentation And Video Alignment Mental Model
 
 `video_start_time` is a signed offset in seconds that maps EEG/EMG time to video time:
 
@@ -81,13 +81,23 @@ project_root/
 video_time = eeg_time + video_start_time;
 ```
 
-As of `preprocess_sleep_data.m` version 0.2.8, single-bin, single-video Viewpoint recordings with no TDT photometry input compute the offset from metadata starts:
+The EEG/EMG source determines how output files are segmented:
+
+- TDT EEG/EMG recordings are split into 12-hour chunks when needed.
+- Viewpoint EEG/EMG recordings follow the Viewpoint `.exp` bin boundaries. They are not re-split into generic 12-hour chunks.
+- When Viewpoint EEG/EMG is paired with TDT photometry, the NE trace is saved using the same output windows as EEG/EMG, so multi-bin Viewpoint outputs split NE by the Viewpoint bin-derived segments.
+
+For supported Viewpoint video exports, the code assumes the existing Viewpoint shape of one AVI per bin. Each saved output gets the AVI path and signed offset for the matching bin. Mismatched bin/video counts and other layouts are not newly supported; inspect real fixtures before adding handling for them.
+
+Viewpoint video offsets are computed from metadata starts:
 
 ```matlab
 video_start_time = (eeg_start_time - video_start_time_metadata) * 24 * 3600;
 ```
 
-Negative values mean the video starts after the EEG/EMG trace, so early EEG/EMG samples have no matching video. Positive values mean the video starts before the EEG/EMG trace, so EEG/EMG time zero maps later into the source video. Multi-bin Viewpoint and TTL-aligned layouts still need targeted follow-up before changing their behavior.
+Negative values mean the video starts after the EEG/EMG trace, so early EEG/EMG samples have no matching video. Positive values mean the video starts before the EEG/EMG trace, so EEG/EMG time zero maps later into the source video.
+
+If Viewpoint EEG/EMG is TTL-synchronized with separate TDT photometry, the saved EEG/EMG timeline starts after the TTL trim. In that supported path, the first segment's `video_start_time` is the Viewpoint metadata offset plus the rounded EEG TTL trim.
 
 ## Tests And Fixtures
 

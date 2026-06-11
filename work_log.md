@@ -2,7 +2,30 @@
 
 Prepend new session notes to the top of this file.
 
+## 2026-06-11
+
+### Documented Viewpoint segmentation and alignment model
+
+- Added a high-level `project_overview.md` explanation of the supported Viewpoint segmentation model: Viewpoint outputs follow `.exp` bin boundaries, supported Viewpoint video exports assume one AVI per bin, and TDT NE is saved using the same output windows as EEG/EMG.
+- Added a small code comment in `preprocess_sleep_data.m` at the Viewpoint `duration_array` construction to make the bin-boundary behavior obvious during future maintenance.
+- Verification:
+  - `git diff --check`
+  - `matlab -batch "addpath(pwd); m=checkcode('preprocess_sleep_data.m','-id'); if isempty(m), disp('preprocess_sleep_data checkcode clean'); else, for k=1:numel(m), fprintf('%d:%s:%s\n',m(k).line,m(k).id,m(k).message); end; end"`
+
 ## 2026-06-10
+
+### Extended supported Viewpoint video offsets
+
+- Updated `preprocess_sleep_data.m` so currently supported Viewpoint exports with one video per bin save metadata-derived signed `video_start_time` values for each saved segment.
+- Reused a single per-segment offset vector for single-output and multi-output saves; the existing TTL-sync path now adds the rounded EEG TTL trim to the first Viewpoint segment's metadata-derived video offset.
+- Kept unsupported or mismatched video/bin layouts on the previous fallback behavior rather than adding speculative new handling.
+- Updated `next_steps.md` to mark the supported multi-bin and TTL follow-up cases as implemented while leaving diagnostics and unknown real fixtures as follow-up work.
+- Verification:
+  - `matlab -batch "addpath(pwd); m=checkcode('preprocess_sleep_data.m','-id'); if isempty(m), disp('preprocess_sleep_data checkcode clean'); else, for k=1:numel(m), fprintf('%d:%s:%s\n',m(k).line,m(k).id,m(k).message); end; end"`
+  - Focused MATLAB smoke export to `%TEMP%\codex_video_alignment_smoke`: box3 `video_start_time = -2.940992`, box4 `video_start_time = -6.140995`, both matching Viewpoint metadata and exporting `11617.000000 s` EEG/EMG.
+  - Focused multi-bin metadata check on `COM12_RZ102_2_2024-05-08_09-04-51-144.exp`: per-bin offsets `-33.501991` and `-7.252003`.
+  - Focused TTL smoke export on README `408_yfp` fixture: saved `video_start_time = 74.923001`; targeted assertion confirmed metadata base `-5.076999` plus rounded EEG TTL onset `80`.
+  - `git diff --check`
 
 ### Prepared treaty docs and release handoff
 

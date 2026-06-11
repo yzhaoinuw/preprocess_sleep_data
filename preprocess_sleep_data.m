@@ -108,7 +108,7 @@ sleep_scores = [];
 ne = [];
 ne_frequency = nan;
 onset_EEG = 0;
-viewpoint_video_start_time = 0;
+viewpoint_video_start_times = [];
 
 %% 2) loading and plotting EEG and EMG raw data
 
@@ -159,9 +159,9 @@ else
         % Use inf for multi-bin exports until bin/video alignment is checked there.
         TimeRelEndSec = Inf;
     end
-    if isempty(ne_dir) && isscalar(Info.BinFiles) && isscalar(viewpoint_video_files)
-        viewpoint_video_start_time = ...
-            (Info.BinFiles(1).TStart - viewpoint_video_files(1).TStart) * 24 * 3600;
+    if numel(viewpoint_video_files) == numel(Info.BinFiles)
+        viewpoint_video_start_times = ...
+            ([Info.BinFiles.TStart] - [viewpoint_video_files.TStart]) * 24 * 3600;
     end
     [eeg_emg_data, ~] = ExtractContinuousData([],Info,[],TimeReldebSec, TimeRelEndSec,[],1);
     emg = eeg_emg_data(1,1:end);
@@ -169,6 +169,7 @@ else
     eeg_frequency = Info.Fs;
     eeg_start_time = [Info.BinFiles.TStart];
     total_duration = length(eeg) / eeg_frequency;
+    % Viewpoint exports follow the .exp bin boundaries, not generic 12-hour chunks.
     duration_array = diff(eeg_start_time) * 24 * 3600;
     duration_array = [duration_array total_duration - sum(duration_array)];
 
@@ -455,6 +456,19 @@ end
 [parent_dir, data_name, ~] = fileparts(save_path);
 prev_end  = 0;
 n_bins = length(duration_array);
+% Offsets are relative to each saved EEG/EMG segment's time zero.
+has_viewpoint_video_offsets = ~isempty(exp_file_path) && numel(viewpoint_video_start_times) == n_bins;
+if has_viewpoint_video_offsets
+    segment_video_start_times = viewpoint_video_start_times;
+    if ~isempty(ne_dir) && ~strcmp(eeg_emg_path, ne_dir)
+        segment_video_start_times(1) = segment_video_start_times(1) + round(onset_EEG);
+    end
+else
+    segment_video_start_times = zeros(1, n_bins);
+    if n_bins >= 1
+        segment_video_start_times(1) = round(onset_EEG);
+    end
+end
 if n_bins > 1
     for i = 1:n_bins
         start_time = prev_end;
@@ -478,11 +492,7 @@ if n_bins > 1
         recording.ne_frequency = ne_frequency;
         recording.video_name = video_names{i};
         recording.video_path = fullfile(video_dirs{i}, video_names{i});
-        if i == 1
-            recording.video_start_time = round(onset_EEG);
-        else
-            recording.video_start_time = 0;
-        end
+        recording.video_start_time = segment_video_start_times(i);
         bin_filename = bin_filenames{i};
         [~, bin_save_name, ~] = fileparts(bin_filename);
         save_path = fullfile(parent_dir, strcat(data_name, '_', bin_save_name, ".mat"));
@@ -490,12 +500,7 @@ if n_bins > 1
     end
 else
     start_time = 0;
-    single_viewpoint_video = ~isempty(exp_file_path) && isempty(ne_dir) && n_bins == 1;
-    if single_viewpoint_video
-        video_start_time = viewpoint_video_start_time;
-    else
-        video_start_time = round(onset_EEG);
-    end
+    video_start_time = segment_video_start_times(1);
     video_name = video_names{1};
     video_path = fullfile(video_dirs{1}, video_names{1});
     save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")

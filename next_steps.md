@@ -32,11 +32,17 @@ Implemented single-bin Viewpoint approach:
 - Preserve signed fractional offsets. Negative values mean video starts after EEG/EMG and early EEG/EMG samples have no matching video; positive values mean video starts before EEG/EMG and EEG/EMG time zero maps later into the source video.
 - For full single-bin exports, avoid the `ExtractContinuousData(..., Inf, ...)` minute truncation by passing an explicit end time based on actual `.bin` duration.
 
+Implemented supported follow-up cases:
+
+- For currently supported multi-bin Viewpoint exports with one Viewpoint video per bin, save a per-bin metadata-derived `video_start_time` instead of only setting the first segment.
+- For the existing Viewpoint EEG/EMG plus TDT photometry TTL-sync path, add the rounded EEG TTL trim to the first saved segment's metadata-derived Viewpoint video offset.
+- Keep other layouts out of scope unless a real supported fixture requires them; do not add speculative support for mismatched video/bin counts or separate Viewpoint video metadata for TDT-only EEG/EMG.
+
 Remaining work:
 
 - Implement a diagnostic summary for single-bin Viewpoint `.exp` files that reports bin/video start times, durations, actual extracted EEG duration, signed start offset, and no-video regions at the beginning or end of the EEG/EMG timeline.
 - Confirm how the Sleep Scoring App interprets signed fractional-second `video_start_time` and displays no-video regions.
-- After the single-bin Viewpoint path is fixed, figure out the best alignment rule for cases involving TTL pulse trimming and for multiple-bin Viewpoint files. Do not generalize the single-bin rule to those layouts without targeted examples.
+- If a real supported fixture appears with mismatched Viewpoint video/bin counts or multiple video groups, inspect it first and add only the minimum needed handling.
 
 ## Background / Paused
 
