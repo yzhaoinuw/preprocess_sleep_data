@@ -16,7 +16,7 @@ The project currently targets MATLAB R2025a.
 
 - Main user-facing function for Viewpoint and/or TDT preprocessing.
 - Accepts a required EEG/EMG path plus name-value options such as `ne_dir`, TDT stream/channel names, `sleep_score_file`, `save_path`, and `show_figure`. The legacy `video_alignment` option is still accepted for compatibility.
-- Saves `eeg`, `emg`, `ne`, `sleep_scores`, `start_time`, `video_start_time`, `num_class`, `eeg_frequency`, `ne_frequency`, `video_name`, and `video_path`.
+- Saves `eeg`, `emg`, `ne`, `sleep_scores`, `start_time`, `video_start_time`, `recording_start_time`, `num_class`, `eeg_frequency`, `ne_frequency`, `video_name`, and `video_path`.
 
 ### 2. Viewpoint Loading
 
@@ -110,6 +110,7 @@ There is not yet a canonical automated test suite or fixture set documented for 
 - Optional TDT photometry input: `ne_dir`, `chan_465`, `chan_405`, and sometimes `chan_ttl_pulse`.
 - Optional manual scores: spreadsheet path passed as `sleep_score_file`.
 - Output: one `.mat` file for single-bin or short recordings, or segmented `.mat` files for multi-bin Viewpoint data and long TDT recordings.
+- Absolute timing: each output includes `recording_start_time`, an ISO-8601 character string for the first EEG/EMG sample saved in that file. TDT timestamps end in `Z` because TDT exposes UTC metadata; Viewpoint and Sirenia timestamps preserve the source clock without inferring a timezone.
 
 ## Practical Mental Model
 

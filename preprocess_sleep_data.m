@@ -5,7 +5,7 @@
 % major modification by Yue Zhao since March, 2024 to add flexibility regarding
 % NE and sleep scores input. See https://github.com/yzhaoinuw/preprocess_sleep_data/tree/dev
 % if you have issues accessing, please email Yue at yuezhao@rochester.edu
-% $Version: 0.2.8
+% $Version: 0.2.9
 
 function [] = preprocess_sleep_data(varargin)
 %% 1) Define args and params
@@ -109,12 +109,21 @@ ne = [];
 ne_frequency = nan;
 onset_EEG = 0;
 viewpoint_video_start_times = [];
+recording_start_datetime = NaT;
+recording_start_is_utc = false;
 
 %% 2) loading and plotting EEG and EMG raw data
 
 % if EEG/EMG come from FP data
 if isempty(exp_file_path)
     fp_data = TDTbin2mat(eeg_emg_path);
+    if ischar(fp_data.info.utcStartTime) || isstring(fp_data.info.utcStartTime)
+        recording_start_datetime = datetime( ...
+            [char(fp_data.info.date) ' ' char(fp_data.info.utcStartTime)], ...
+            'InputFormat', 'yyyy-MMM-dd HH:mm:ss', ...
+            'Locale', 'en_US', 'TimeZone', 'UTC');
+        recording_start_is_utc = true;
+    end
     while ~isfield(fp_data.streams, EEG_stream)
         disp(['Invalid EEG stream in the TDT file. You entered', EEG_stream])
         stream_names = fieldnames(fp_data.streams);
@@ -148,6 +157,8 @@ if isempty(exp_file_path)
     video_dirs = strings(1,n_seg);
 else
     Info=loadEXP(exp_file_path,'no');
+    recording_start_datetime = datetime( ...
+        Info.BinFiles(1).TStart, 'ConvertFrom', 'datenum');
     bin_filenames = {Info.BinFiles.FileName};
     viewpoint_video_files = [Info.VideosFiles.Files];
     video_names = {viewpoint_video_files.FileName};
@@ -350,6 +361,8 @@ if ~isempty(ne_dir) && ~strcmp(eeg_emg_path, ne_dir)
     % Removing first seconds of EEG and EMG raw traces to align with FP trace
     emg = emg(onset_EEG_ind:end);
     eeg = eeg(onset_EEG_ind:end);
+    recording_start_datetime = recording_start_datetime + ...
+        seconds((onset_EEG_ind - 1) / eeg_frequency);
     total_duration = floor(length(eeg) / eeg_frequency);
     duration_array(1) = duration_array(1) - round(onset_EEG);
     time_eeg = (0:length(eeg)-1)/eeg_frequency;
@@ -493,6 +506,9 @@ if n_bins > 1
         recording.video_name = video_names{i};
         recording.video_path = fullfile(video_dirs{i}, video_names{i});
         recording.video_start_time = segment_video_start_times(i);
+        recording.recording_start_time = format_recording_start_time( ...
+            recording_start_datetime + seconds(start_time), ...
+            recording_start_is_utc);
         bin_filename = bin_filenames{i};
         [~, bin_save_name, ~] = fileparts(bin_filename);
         save_path = fullfile(parent_dir, strcat(data_name, '_', bin_save_name, ".mat"));
@@ -503,6 +519,21 @@ else
     video_start_time = segment_video_start_times(1);
     video_name = video_names{1};
     video_path = fullfile(video_dirs{1}, video_names{1});
-    save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")
+    recording_start_time = format_recording_start_time( ...
+        recording_start_datetime, recording_start_is_utc);
+    save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "recording_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")
+end
+end
+
+function timestamp = format_recording_start_time(start_datetime, is_utc)
+if isnat(start_datetime)
+    timestamp = '';
+    return
+end
+
+start_datetime.Format = 'yyyy-MM-dd''T''HH:mm:ss.SSS';
+timestamp = char(start_datetime);
+if is_utc
+    timestamp = [timestamp 'Z'];
 end
 end

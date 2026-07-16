@@ -121,6 +121,10 @@ video_path = '';
 video_start_time = 0;
 
 %% 3) Extract EEG/EMG from Sirenia
+edf_info = edfinfo(edf_file);
+recording_start_datetime = datetime( ...
+    [char(edf_info.StartDate) ' ' char(edf_info.StartTime)], ...
+    'InputFormat', 'dd.MM.yy HH.mm.ss');
 [data_table,annotations] = edfread(edf_file);
 timeCol = seconds(data_table.('Record Time'));
 timeSteps = diff(timeCol);
@@ -151,6 +155,8 @@ end
 
 eeg = eeg(pulseOnsetInd:end);
 emg = emg(pulseOnsetInd:end);
+recording_start_datetime = recording_start_datetime + ...
+    seconds((pulseOnsetInd - 1) / eeg_frequency);
 eeg = single(eeg);
 emg = single(emg);
 
@@ -211,6 +217,11 @@ if ~isempty(interval)
     video_start_time = video_start_time + t_start;
 
     eeg_mask = (timeEEG >= t_start) & (timeEEG <= t_end);
+    interval_start_index = find(eeg_mask, 1, 'first');
+    if ~isempty(interval_start_index)
+        recording_start_datetime = recording_start_datetime + ...
+            seconds(timeEEG(interval_start_index));
+    end
     eeg = eeg(eeg_mask);
     emg = emg(eeg_mask);
     timeEEG = timeEEG(eeg_mask);
@@ -249,4 +260,11 @@ end
 
 %% 7) Save data
 num_class = 3;
-save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")
+recording_start_time = format_recording_start_time(recording_start_datetime);
+save(save_path, "eeg", "emg", "ne", "sleep_scores", "start_time", "video_start_time", "recording_start_time", "num_class", "eeg_frequency", "ne_frequency", "video_name", "video_path")
+end
+
+function timestamp = format_recording_start_time(start_datetime)
+start_datetime.Format = 'yyyy-MM-dd''T''HH:mm:ss.SSS';
+timestamp = char(start_datetime);
+end

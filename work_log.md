@@ -2,6 +2,22 @@
 
 Prepend new session notes to the top of this file.
 
+## 2026-07-16
+
+### Released absolute recording start timestamps as v0.2.9
+
+- Added `recording_start_time` to both preprocessing outputs as an ISO-8601 character string identifying the first EEG/EMG sample saved in each MAT file.
+- Derived the timestamp from Viewpoint bin metadata, TDT UTC block metadata, or the Sirenia EDF header, including per-segment, TTL-trim, and Sirenia interval offsets.
+- Kept source timezone semantics explicit: TDT timestamps use a trailing `Z`; Viewpoint and Sirenia source clocks remain timezone-unspecified.
+- Added a user-facing `CHANGELOG.md` covering the changes since `v0.2.7` and prepared the repository for the `v0.2.9` tag and GitHub Release.
+- Verification:
+  - `matlab -batch "issues1=checkcode('preprocess_sleep_data.m','-id'); issues2=checkcode('preprocess_sirenia.m','-id'); ..."` confirmed `checkcode_main=0` and `checkcode_sirenia=0`.
+  - A real Sirenia EDF-only export with `interval = [10 20]` saved `recording_start_time = '2026-05-17T10:18:23.000'` as a character array, correctly advancing the EDF header time by 10 seconds.
+  - A real single-bin Viewpoint export saved `recording_start_time = '2026-05-05T09:01:48.997'`, exactly matching `Info.BinFiles(1).TStart` formatted as ISO-8601.
+  - `TDTbin2mat(..., 'T2', 1, 'NODATA', true)` on a real TDT block confirmed its date and UTC start metadata convert to `2023-09-28T08:38:30.000Z`.
+  - `git diff --check`
+  - `Get-Content README.md -Encoding Unicode | Select-String -Pattern 'recording_start_time' -Context 1,1`, plus a byte check confirming the UTF-16 LE BOM remains `FF FE`.
+
 ## 2026-07-02
 
 ### Added Sirenia EDF-only preprocessing
